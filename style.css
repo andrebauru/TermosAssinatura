@@ -1,0 +1,373 @@
+@font-face {
+    font-family: 'FingerPaint';
+    src: url('Files/FingerPaint-Regular.ttf') format('truetype');
+    font-weight: normal;
+    font-style: normal;
+}
+
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;700&display=swap');
+
+:root {
+    --bg-dark: #0f0f0f;
+    --bg-card: rgba(25, 25, 25, 0.75);
+    --gold: #d4af37;
+    --gold-hover: #f3e5ab;
+    --red: #8c1414;
+    --red-hover: #b31b1b;
+    --text-light: #f8f9fa;
+    --text-muted: #c0c0c0;
+    --font-heading: 'FingerPaint', 'Cinzel', serif;
+    --font-body: 'Outfit', 'Inter', sans-serif;
+}
+
+body {
+    background: radial-gradient(circle at center, #220808 0%, var(--bg-dark) 100%) no-repeat fixed;
+    color: var(--text-light);
+    font-family: var(--font-body);
+    min-height: 100vh;
+    margin: 0;
+    padding: 0;
+    overflow-x: hidden;
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+/* Kiosk Layout for Tablet */
+.kiosk-container {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    padding: 2rem;
+    position: relative;
+    z-index: 10;
+}
+
+/* Glassmorphism card */
+.glass-panel {
+    background: var(--bg-card);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(212, 175, 55, 0.25);
+    border-radius: 20px;
+    box-shadow: 0 15px 35px rgba(0, 0, 0, 0.6), 0 0 20px rgba(140, 20, 20, 0.15);
+    padding: 2.5rem;
+    transition: transform 0.3s ease, border-color 0.3s ease;
+}
+
+.glass-panel:hover {
+    border-color: rgba(212, 175, 55, 0.4);
+}
+
+/* Headers */
+h1, h2, h3, .temple-title {
+    font-family: var(--font-heading);
+    color: var(--gold);
+    text-shadow: 0 0 10px rgba(212, 175, 55, 0.3), 0 0 20px rgba(140, 20, 20, 0.5);
+    letter-spacing: 1px;
+}
+
+/* Fullscreen Button */
+.btn-fullscreen {
+    position: absolute;
+    top: 1.5rem;
+    right: 1.5rem;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(212, 175, 55, 0.3);
+    color: var(--gold);
+    border-radius: 50%;
+    width: 50px;
+    height: 50px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    z-index: 1000;
+}
+
+.btn-fullscreen:hover {
+    background: rgba(212, 175, 55, 0.15);
+    transform: scale(1.1);
+    box-shadow: 0 0 15px rgba(212, 175, 55, 0.4);
+}
+
+/* Gira Image styling */
+.gira-frame {
+    position: relative;
+    border-radius: 15px;
+    overflow: hidden;
+    border: 2px solid var(--gold);
+    box-shadow: 0 0 25px rgba(140, 20, 20, 0.4);
+    max-width: 450px;
+    margin: 0 auto 2rem;
+    background: #000;
+}
+
+.gira-image {
+    width: 100%;
+    height: 300px;
+    object-fit: cover;
+    display: block;
+    opacity: 0.85;
+    transition: opacity 0.5s ease;
+}
+
+.gira-frame::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: linear-gradient(to bottom, rgba(0,0,0,0) 60%, rgba(15,15,15,0.95) 100%);
+    pointer-events: none;
+}
+
+/* Pulsating Touch Button */
+.btn-pulsate {
+    background: linear-gradient(135deg, var(--red) 0%, #540505 100%);
+    color: var(--text-light);
+    font-family: var(--font-heading);
+    border: 2px solid var(--gold);
+    border-radius: 50px;
+    padding: 1.2rem 3rem;
+    font-size: 1.5rem;
+    letter-spacing: 1px;
+    box-shadow: 0 0 20px rgba(140, 20, 20, 0.6), 0 0 0 0px rgba(212, 175, 55, 0.5);
+    animation: pulsate 2s infinite;
+    transition: all 0.3s ease;
+}
+
+.btn-pulsate:hover, .btn-pulsate:active {
+    background: linear-gradient(135deg, var(--red-hover) 0%, var(--red) 100%);
+    transform: scale(1.05);
+    box-shadow: 0 0 30px rgba(212, 175, 55, 0.8);
+    color: #fff;
+}
+
+@keyframes pulsate {
+    0% {
+        transform: scale(1);
+        box-shadow: 0 0 15px rgba(140, 20, 20, 0.6), 0 0 0 0px rgba(212, 175, 55, 0.4);
+    }
+    50% {
+        transform: scale(1.03);
+        box-shadow: 0 0 25px rgba(140, 20, 20, 0.8), 0 0 0 10px rgba(212, 175, 55, 0);
+    }
+    100% {
+        transform: scale(1);
+        box-shadow: 0 0 15px rgba(140, 20, 20, 0.6), 0 0 0 0px rgba(212, 175, 55, 0);
+    }
+}
+
+/* Termo Text Box */
+.termo-container {
+    max-height: 40vh;
+    overflow-y: auto;
+    background: rgba(0, 0, 0, 0.4);
+    border-radius: 10px;
+    padding: 1.5rem;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    margin-bottom: 2rem;
+}
+
+/* Custom Scrollbar for Termo */
+.termo-container::-webkit-scrollbar {
+    width: 8px;
+}
+
+.termo-container::-webkit-scrollbar-track {
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 10px;
+}
+
+.termo-container::-webkit-scrollbar-thumb {
+    background: var(--red);
+    border-radius: 10px;
+    border: 1px solid rgba(212, 175, 55, 0.3);
+}
+
+.termo-container::-webkit-scrollbar-thumb:hover {
+    background: var(--red-hover);
+}
+
+/* Sticky top scroll button */
+.btn-scroll-down {
+    background: rgba(0, 0, 0, 0.6);
+    border: 1px solid var(--gold);
+    color: var(--gold);
+    border-radius: 30px;
+    padding: 0.5rem 1.2rem;
+    font-size: 0.9rem;
+    transition: all 0.3s ease;
+    backdrop-filter: blur(5px);
+}
+
+.btn-scroll-down:hover {
+    background: var(--gold);
+    color: #000;
+}
+
+/* Sign Form */
+.form-label {
+    color: var(--gold);
+    font-weight: 500;
+    margin-bottom: 0.4rem;
+}
+
+.form-control {
+    background: rgba(20, 20, 20, 0.7);
+    border: 1px solid rgba(212, 175, 55, 0.3);
+    color: var(--text-light);
+    border-radius: 8px;
+    padding: 0.8rem 1rem;
+    font-size: 1.1rem;
+}
+
+.form-control:focus {
+    background: rgba(30, 30, 30, 0.9);
+    border-color: var(--gold);
+    color: var(--text-light);
+    box-shadow: 0 0 10px rgba(212, 175, 55, 0.3);
+}
+
+.btn-confirm {
+    background: linear-gradient(135deg, #1e5a22 0%, #0d3810 100%);
+    border: 1px solid var(--gold);
+    color: #fff;
+    font-weight: bold;
+    padding: 0.8rem 2rem;
+    font-size: 1.1rem;
+    border-radius: 8px;
+    transition: all 0.3s ease;
+}
+
+.btn-confirm:hover, .btn-confirm:active {
+    background: linear-gradient(135deg, #2a7a2e 0%, #154c18 100%);
+    box-shadow: 0 0 15px rgba(30, 120, 35, 0.5);
+    border-color: #fff;
+}
+
+.btn-refuse {
+    background: linear-gradient(135deg, #7c1a1a 0%, #4d0a0a 100%);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    color: #f8f9fa;
+    padding: 0.8rem 2rem;
+    font-size: 1.1rem;
+    border-radius: 8px;
+    transition: all 0.3s ease;
+}
+
+.btn-refuse:hover, .btn-refuse:active {
+    background: linear-gradient(135deg, #a62424 0%, #660e0e 100%);
+    box-shadow: 0 0 15px rgba(166, 36, 36, 0.5);
+}
+
+/* Success Screen */
+.success-screen {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    padding: 2rem;
+    text-align: center;
+}
+
+.success-icon {
+    font-size: 5rem;
+    color: var(--gold);
+    margin-bottom: 2rem;
+    text-shadow: 0 0 20px rgba(212, 175, 55, 0.6);
+    animation: scaleUp 0.8s cubic-bezier(0.175, 0.885, 0.32, 1.275) both;
+}
+
+.success-message {
+    font-family: var(--font-heading);
+    font-size: 2.5rem;
+    color: var(--text-light);
+    text-shadow: 0 0 15px rgba(255, 255, 255, 0.2);
+    margin-bottom: 1.5rem;
+    line-height: 1.3;
+}
+
+.success-sub {
+    font-size: 1.2rem;
+    color: var(--text-muted);
+}
+
+@keyframes scaleUp {
+    0% {
+        transform: scale(0.5);
+        opacity: 0;
+    }
+    100% {
+        transform: scale(1);
+        opacity: 1;
+    }
+}
+
+/* Progress/Countdown Bar */
+.countdown-bar {
+    height: 4px;
+    background: var(--gold);
+    width: 100%;
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    animation: countdown 4s linear forwards;
+    box-shadow: 0 0 10px rgba(212, 175, 55, 0.5);
+}
+
+@keyframes countdown {
+    from { width: 100%; }
+    to { width: 0%; }
+}
+
+/* Background Logo Wrapper */
+.bg-logo-container {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    pointer-events: none;
+    z-index: 0;
+    overflow: hidden;
+}
+
+.bg-logo {
+    width: 75vmin;
+    height: 75vmin;
+    background-image: url('Files/Logo TT TEKEM.png');
+    background-size: contain;
+    background-position: center;
+    background-repeat: no-repeat;
+    opacity: 0.08; /* Marca d'água sutil para não atrapalhar a leitura */
+    filter: drop-shadow(0 0 35px rgba(140, 20, 20, 0.45));
+    animation: rotateLogo 80s linear infinite, pulseLogo 10s ease-in-out infinite;
+}
+
+@keyframes rotateLogo {
+    0% {
+        transform: rotate(0deg);
+    }
+    100% {
+        transform: rotate(360deg);
+    }
+}
+
+@keyframes pulseLogo {
+    0%, 100% {
+        transform: scale(0.95);
+        opacity: 0.07;
+    }
+    50% {
+        transform: scale(1.05);
+        opacity: 0.12;
+    }
+}

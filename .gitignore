@@ -1,0 +1,8 @@
+# Ignore uploaded images but keep the folder structure
+/uploads/*
+!/uploads/.gitkeep
+
+# Ignore OS files
+Thumbs.db
+Desktop.ini
+.DS_Store

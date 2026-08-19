@@ -2,19 +2,23 @@
 require_once 'config.php';
 
 $gira_imagem = '';
+$gira_titulo  = '';
 try {
-    $stmt = $pdo->query("SELECT valor FROM configuracoes WHERE chave = 'gira_imagem'");
-    $gira_imagem = $stmt->fetchColumn();
+    $stmt = $pdo->query("SELECT chave, valor FROM configuracoes WHERE chave IN ('gira_imagem','gira_titulo')");
+    foreach ($stmt->fetchAll(PDO::FETCH_KEY_PAIR) as $k => $v) {
+        if ($k === 'gira_imagem') $gira_imagem = $v;
+        if ($k === 'gira_titulo')  $gira_titulo  = $v;
+    }
 } catch (PDOException $e) {
     // Ignora erro de conexão temporariamente
 }
 
 // Fallback para a logo do Templo
 $gira_ativa = 'Files/Logo TT TEKEM.png';
-$tem_gira = false;
+$tem_gira   = false;
 if (!empty($gira_imagem) && file_exists($gira_imagem)) {
     $gira_ativa = $gira_imagem;
-    $tem_gira = true;
+    $tem_gira   = true;
 }
 ?>
 <!DOCTYPE html>
@@ -42,27 +46,102 @@ if (!empty($gira_imagem) && file_exists($gira_imagem)) {
         <i class="fa-solid fa-expand" id="fullscreenIcon"></i>
     </button>
 
+    <!-- Botão de Saída (protegido por senha) -->
+    <button class="btn-exit" id="exitBtn" title="Sair do modo quiosque">
+        <i class="fa-solid fa-right-from-bracket"></i> Sair
+    </button>
+
+    <!-- Modal de Senha para Saída -->
+    <div class="exit-modal-overlay" id="exitModalOverlay">
+        <div class="exit-modal-box">
+            <div class="exit-icon"><i class="fa-solid fa-lock"></i></div>
+            <h3>Saída Restrita</h3>
+            <p>Digite a senha para sair do modo quiosque.</p>
+            <input
+                type="password"
+                class="exit-pin-input"
+                id="exitPinInput"
+                maxlength="10"
+                placeholder="••••"
+                autocomplete="off"
+            >
+            <div class="exit-error-msg" id="exitErrorMsg"></div>
+            <div class="d-flex gap-2 mt-3">
+                <button class="btn btn-outline-secondary flex-fill" id="exitCancelBtn">Cancelar</button>
+                <button class="btn btn-confirm flex-fill" id="exitConfirmBtn">
+                    <i class="fa-solid fa-unlock me-1"></i> Confirmar
+                </button>
+            </div>
+        </div>
+    </div>
+
     <div class="container kiosk-container">
         <!-- Cabeçalho -->
-        <header class="text-center pt-4 mb-4">
-            <h1 class="temple-title display-5 mb-2">Templo TUDO TEKEM</h1>
-            <p class="text-uppercase tracking-widest text-muted small" style="letter-spacing: 3px;">
-                Quimbanda • Umbanda • Wilhelm Cardoso
+        <header class="text-center pt-4 mb-3">
+            <h1 class="temple-title display-5 mb-1">Templo TUDO TEKEM</h1>
+            <p class="small mb-0" style="letter-spacing: 3px; text-transform: uppercase; color: var(--text-muted);">
+                Quimbanda &bull; Umbanda &bull; Wilhelm Cardoso
             </p>
         </header>
 
         <!-- Conteúdo Central -->
         <main class="text-center my-auto">
-            <div class="glass-panel mx-auto" style="max-width: 600px;">
-                <h2 class="h4 mb-4 text-white"><?= $tem_gira ? 'Gira de Hoje' : 'Bem-vindo ao Templo' ?></h2>
-                
+            <div class="glass-panel mx-auto" style="max-width: 620px;">
+                <h2 class="h4 mb-3 text-white"><?= $tem_gira ? 'Gira de Hoje' : 'Bem-vindo ao Templo' ?></h2>
+
+                <!-- Título da Gira (se definido) -->
+                <?php if ($tem_gira && !empty($gira_titulo)): ?>
+                    <div class="mb-3">
+                        <span class="gira-titulo-badge">
+                            <i class="fa-solid fa-fire"></i><?= htmlspecialchars($gira_titulo) ?>
+                        </span>
+                    </div>
+                <?php endif; ?>
+
                 <!-- Frame da Imagem da Gira ou Logo -->
                 <div class="gira-frame <?= !$tem_gira ? 'border-0 bg-transparent shadow-none' : '' ?>">
                     <img src="<?= htmlspecialchars($gira_ativa) ?>" alt="<?= $tem_gira ? 'Gira de Hoje' : 'Logo Templo' ?>" class="gira-image" style="<?= !$tem_gira ? 'object-fit: contain; opacity: 0.95; filter: drop-shadow(0 0 15px rgba(212, 175, 55, 0.4));' : '' ?>">
                 </div>
 
+                <!-- Separador -->
+                <hr class="section-divider">
+
+                <!-- Mestres da Casa -->
+                <div class="mb-3">
+                    <p class="section-label"><i class="fa-solid fa-star me-1"></i>Mestres da Casa</p>
+                    <div class="masters-section">
+                        <div class="master-card">
+                            <span class="master-icon"><i class="fa-solid fa-crown"></i></span>
+                            <span class="master-name">Mestre Will</span>
+                            <span class="master-role">Wilhelm Cardoso</span>
+                        </div>
+                        <div class="master-card">
+                            <span class="master-icon"><i class="fa-solid fa-hat-wizard"></i></span>
+                            <span class="master-name">Tatá André</span>
+                            <span class="master-role">Guardião do Templo</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Entidades Chefes -->
+                <div class="mb-4">
+                    <p class="section-label"><i class="fa-solid fa-khanda me-1"></i>Entidades Chefes</p>
+                    <div class="masters-section">
+                        <div class="entity-card">
+                            <span class="entity-icon"><i class="fa-solid fa-skull-crossbones"></i></span>
+                            <span class="entity-name">Exu Mirim</span>
+                            <span class="entity-role">Entidade Chefe</span>
+                        </div>
+                        <div class="entity-card">
+                            <span class="entity-icon"><i class="fa-solid fa-bolt"></i></span>
+                            <span class="entity-name">Zé Navalha</span>
+                            <span class="entity-role">Entidade Chefe</span>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Botão de Ação -->
-                <div class="mt-4">
+                <div class="mt-2">
                     <a href="termos.php" class="btn btn-pulsate d-inline-block text-decoration-none">
                         Toque aqui para assinar <i class="fa-solid fa-signature ms-2"></i>
                     </a>
@@ -71,44 +150,88 @@ if (!empty($gira_imagem) && file_exists($gira_imagem)) {
         </main>
 
         <!-- Rodapé -->
-        <footer class="text-center text-muted small pb-2">
+        <footer class="text-center small pb-2" style="color: var(--text-muted);">
             &copy; <?= date('Y') ?> Templo TUDO TEKEM. Todos os direitos reservados.
         </footer>
     </div>
 
     <!-- Bootstrap 5 JS -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
-    
-    <!-- Fullscreen API Script -->
+
     <script>
+        /* ── Fullscreen Toggle ── */
         const fullscreenToggle = document.getElementById('fullscreenToggle');
-        const fullscreenIcon = document.getElementById('fullscreenIcon');
+        const fullscreenIcon   = document.getElementById('fullscreenIcon');
 
         fullscreenToggle.addEventListener('click', () => {
             if (!document.fullscreenElement) {
                 document.documentElement.requestFullscreen().then(() => {
-                    fullscreenIcon.classList.remove('fa-expand');
-                    fullscreenIcon.classList.add('fa-compress');
-                }).catch(err => {
-                    console.error(`Erro ao tentar ativar o modo tela cheia: ${err.message}`);
-                });
+                    fullscreenIcon.classList.replace('fa-expand', 'fa-compress');
+                }).catch(err => console.error(err));
             } else {
                 document.exitFullscreen().then(() => {
-                    fullscreenIcon.classList.remove('fa-compress');
-                    fullscreenIcon.classList.add('fa-expand');
+                    fullscreenIcon.classList.replace('fa-compress', 'fa-expand');
                 });
             }
         });
 
-        // Evento para atualizar o ícone caso a tela cheia seja desativada de outra forma (ex: tecla Esc)
         document.addEventListener('fullscreenchange', () => {
             if (!document.fullscreenElement) {
-                fullscreenIcon.classList.remove('fa-compress');
-                fullscreenIcon.classList.add('fa-expand');
+                fullscreenIcon.classList.replace('fa-compress', 'fa-expand');
             } else {
-                fullscreenIcon.classList.remove('fa-expand');
-                fullscreenIcon.classList.add('fa-compress');
+                fullscreenIcon.classList.replace('fa-expand', 'fa-compress');
             }
+        });
+
+        /* ── Exit Modal (senha 2307) ── */
+        const EXIT_PASSWORD      = '2307';
+        const exitBtn            = document.getElementById('exitBtn');
+        const exitModalOverlay   = document.getElementById('exitModalOverlay');
+        const exitPinInput       = document.getElementById('exitPinInput');
+        const exitErrorMsg       = document.getElementById('exitErrorMsg');
+        const exitCancelBtn      = document.getElementById('exitCancelBtn');
+        const exitConfirmBtn     = document.getElementById('exitConfirmBtn');
+
+        function openExitModal() {
+            exitPinInput.value = '';
+            exitErrorMsg.textContent = '';
+            exitPinInput.classList.remove('error');
+            exitModalOverlay.classList.add('active');
+            setTimeout(() => exitPinInput.focus(), 100);
+        }
+
+        function closeExitModal() {
+            exitModalOverlay.classList.remove('active');
+        }
+
+        function tryExit() {
+            if (exitPinInput.value === EXIT_PASSWORD) {
+                closeExitModal();
+                if (document.fullscreenElement) {
+                    document.exitFullscreen().then(() => {
+                        fullscreenIcon.classList.replace('fa-compress', 'fa-expand');
+                    });
+                }
+            } else {
+                exitPinInput.classList.add('error');
+                exitErrorMsg.textContent = 'Senha incorreta. Tente novamente.';
+                exitPinInput.value = '';
+                setTimeout(() => exitPinInput.classList.remove('error'), 400);
+            }
+        }
+
+        exitBtn.addEventListener('click', openExitModal);
+        exitCancelBtn.addEventListener('click', closeExitModal);
+        exitConfirmBtn.addEventListener('click', tryExit);
+
+        exitPinInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') tryExit();
+            if (e.key === 'Escape') closeExitModal();
+        });
+
+        // Fechar clicando fora do box
+        exitModalOverlay.addEventListener('click', (e) => {
+            if (e.target === exitModalOverlay) closeExitModal();
         });
     </script>
 </body>

@@ -2,7 +2,7 @@
 // Configurações de acesso ao banco de dados
 define('DB_HOST', 'localhost');
 define('DB_NAME', 'templo_checkin');
-define('DB_USER', 'root');
+define('DB_USER', 'checkin_templo');
 define('DB_PASS', '');
 
 try {

@@ -13,6 +13,34 @@ if (isset($_GET['action']) && $_GET['action'] === 'logout') {
     exit;
 }
 
+// Exportar CSV
+if (isset($_GET['action']) && $_GET['action'] === 'export_csv' && isset($_SESSION['admin_logged']) && $_SESSION['admin_logged'] === true) {
+    try {
+        $where = '';
+        $params = [];
+        if (!empty($_GET['data_filtro'])) {
+            $where = "WHERE DATE(data_hora) = :data_filtro";
+            $params[':data_filtro'] = $_GET['data_filtro'];
+        }
+        $stmt = $pdo->prepare("SELECT id, nome, sobrenome, data_hora FROM visitantes $where ORDER BY data_hora DESC");
+        $stmt->execute($params);
+        $rows = $stmt->fetchAll();
+
+        header('Content-Type: text/csv; charset=utf-8');
+        header('Content-Disposition: attachment; filename="visitantes_' . date('Y-m-d') . '.csv"');
+        $out = fopen('php://output', 'w');
+        fprintf($out, chr(0xEF).chr(0xBB).chr(0xBF)); // BOM UTF-8
+        fputcsv($out, ['ID', 'Nome', 'Sobrenome', 'Data/Hora'], ';');
+        foreach ($rows as $row) {
+            fputcsv($out, [$row['id'], $row['nome'], $row['sobrenome'], $row['data_hora']], ';');
+        }
+        fclose($out);
+        exit;
+    } catch (PDOException $e) {
+        die('Erro ao exportar: ' . $e->getMessage());
+    }
+}
+
 // Processamento de Login
 $login_error = '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'login') {
@@ -31,7 +59,7 @@ $is_logged = isset($_SESSION['admin_logged']) && $_SESSION['admin_logged'] === t
 
 // Processamento de ações administrativas (apenas se logado)
 $success_message = '';
-$error_message = '';
+$error_message   = '';
 
 if ($is_logged && $_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = isset($_POST['admin_action']) ? $_POST['admin_action'] : '';
@@ -48,33 +76,39 @@ if ($is_logged && $_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 
-    // Ação: Upload de Imagem da Gira
+    // Ação: Upload de Imagem da Gira + Título
     if ($action === 'upload_gira') {
+        // Salvar título da gira
+        $novo_titulo = isset($_POST['gira_titulo']) ? trim($_POST['gira_titulo']) : '';
+        try {
+            $stmt_t = $pdo->prepare("UPDATE configuracoes SET valor = :valor WHERE chave = 'gira_titulo'");
+            $stmt_t->execute([':valor' => $novo_titulo]);
+        } catch (PDOException $e) {
+            $error_message = 'Erro ao salvar o título: ' . $e->getMessage();
+        }
+
+        // Upload de imagem (opcional — se não enviar arquivo, apenas salva o título)
         if (isset($_FILES['gira_file']) && $_FILES['gira_file']['error'] === UPLOAD_ERR_OK) {
-            $file_tmp = $_FILES['gira_file']['tmp_name'];
+            $file_tmp  = $_FILES['gira_file']['tmp_name'];
             $file_name = $_FILES['gira_file']['name'];
-            $file_ext = strtolower(pathinfo($file_name, PATHINFO_EXTENSION));
-            
+            $file_ext  = strtolower(pathinfo($file_name, PATHINFO_EXTENSION));
+
             $allowed_exts = ['jpg', 'jpeg', 'png', 'webp'];
-            
+
             if (in_array($file_ext, $allowed_exts)) {
-                // Nome único para evitar problemas de cache do navegador
                 $new_file_name = 'gira_' . time() . '.' . $file_ext;
-                $dest_path = 'uploads/' . $new_file_name;
-                
+                $dest_path     = 'uploads/' . $new_file_name;
+
                 if (move_uploaded_file($file_tmp, $dest_path)) {
                     try {
-                        // Opcional: Apagar imagem anterior se ela existir
                         $stmt_prev = $pdo->query("SELECT valor FROM configuracoes WHERE chave = 'gira_imagem'");
-                        $prev_img = $stmt_prev->fetchColumn();
+                        $prev_img  = $stmt_prev->fetchColumn();
                         if (!empty($prev_img) && file_exists($prev_img)) {
                             @unlink($prev_img);
                         }
-
-                        // Atualiza no banco
                         $stmt = $pdo->prepare("UPDATE configuracoes SET valor = :valor WHERE chave = 'gira_imagem'");
                         $stmt->execute([':valor' => $dest_path]);
-                        $success_message = 'Imagem da Gira do Dia atualizada com sucesso!';
+                        $success_message = 'Gira do Dia atualizada com sucesso! Título: "' . htmlspecialchars($novo_titulo) . '"';
                     } catch (PDOException $e) {
                         $error_message = 'Erro ao salvar a imagem no banco de dados: ' . $e->getMessage();
                     }
@@ -84,8 +118,9 @@ if ($is_logged && $_SERVER['REQUEST_METHOD'] === 'POST') {
             } else {
                 $error_message = 'Formato inválido. Apenas imagens JPG, PNG e WEBP são aceitas.';
             }
-        } else {
-            $error_message = 'Nenhum arquivo enviado ou erro no upload.';
+        } elseif (empty($error_message)) {
+            // Nenhum arquivo enviado, mas título foi salvo
+            $success_message = 'Título da Gira atualizado para: "' . htmlspecialchars($novo_titulo) . '"';
         }
     }
 
@@ -93,38 +128,62 @@ if ($is_logged && $_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($action === 'remove_gira') {
         try {
             $stmt_prev = $pdo->query("SELECT valor FROM configuracoes WHERE chave = 'gira_imagem'");
-            $prev_img = $stmt_prev->fetchColumn();
+            $prev_img  = $stmt_prev->fetchColumn();
             if (!empty($prev_img) && file_exists($prev_img)) {
                 @unlink($prev_img);
             }
-
             $stmt = $pdo->prepare("UPDATE configuracoes SET valor = '' WHERE chave = 'gira_imagem'");
             $stmt->execute();
-            $success_message = 'Imagem da Gira removida. O sistema voltou a exibir a logo padrão.';
+            $stmt_t = $pdo->prepare("UPDATE configuracoes SET valor = '' WHERE chave = 'gira_titulo'");
+            $stmt_t->execute();
+            $success_message = 'Imagem da Gira removida. O sistema voltará a exibir a logo padrão.';
         } catch (PDOException $e) {
             $error_message = 'Erro ao atualizar o banco de dados: ' . $e->getMessage();
         }
     }
 }
 
-// Recupera informações atuais do banco de dados (se logado)
-$termo_atual = '';
-$gira_imagem_atual = '';
-$visitantes = [];
+// Recupera informações do banco de dados (se logado)
+$termo_atual        = '';
+$gira_imagem_atual  = '';
+$gira_titulo_atual  = '';
+$visitantes         = [];
+$total_hoje         = 0;
+$total_geral        = 0;
+$ultima_assinatura  = null;
+$data_filtro        = isset($_GET['data_filtro']) ? $_GET['data_filtro'] : '';
 
 if ($is_logged) {
     try {
-        // Recupera termos
-        $stmt = $pdo->query("SELECT valor FROM configuracoes WHERE chave = 'termo_texto'");
-        $termo_atual = $stmt->fetchColumn();
+        // Recupera configurações
+        $stmt = $pdo->query("SELECT chave, valor FROM configuracoes WHERE chave IN ('termo_texto','gira_imagem','gira_titulo')");
+        foreach ($stmt->fetchAll(PDO::FETCH_KEY_PAIR) as $k => $v) {
+            if ($k === 'termo_texto')  $termo_atual       = $v;
+            if ($k === 'gira_imagem')  $gira_imagem_atual = $v;
+            if ($k === 'gira_titulo')  $gira_titulo_atual  = $v;
+        }
 
-        // Recupera imagem da gira
-        $stmt_img = $pdo->query("SELECT valor FROM configuracoes WHERE chave = 'gira_imagem'");
-        $gira_imagem_atual = $stmt_img->fetchColumn();
+        // Estatísticas
+        $stmt_hoje  = $pdo->query("SELECT COUNT(*) FROM visitantes WHERE DATE(data_hora) = CURDATE()");
+        $total_hoje = (int)$stmt_hoje->fetchColumn();
 
-        // Recupera lista de visitantes assinados
-        $stmt_vis = $pdo->query("SELECT id, nome, sobrenome, data_hora FROM visitantes ORDER BY data_hora DESC");
+        $stmt_total  = $pdo->query("SELECT COUNT(*) FROM visitantes");
+        $total_geral = (int)$stmt_total->fetchColumn();
+
+        $stmt_ultima    = $pdo->query("SELECT nome, sobrenome, data_hora FROM visitantes ORDER BY data_hora DESC LIMIT 1");
+        $ultima_assinatura = $stmt_ultima->fetch();
+
+        // Recupera visitantes (com filtro de data opcional)
+        $where  = '';
+        $params = [];
+        if (!empty($data_filtro)) {
+            $where  = "WHERE DATE(data_hora) = :data_filtro";
+            $params = [':data_filtro' => $data_filtro];
+        }
+        $stmt_vis = $pdo->prepare("SELECT id, nome, sobrenome, data_hora FROM visitantes $where ORDER BY data_hora DESC");
+        $stmt_vis->execute($params);
         $visitantes = $stmt_vis->fetchAll();
+
     } catch (PDOException $e) {
         $error_message = 'Erro ao conectar e recuperar dados: ' . $e->getMessage();
     }
@@ -140,44 +199,14 @@ if ($is_logged) {
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <!-- Font Awesome Icons -->
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css" rel="stylesheet">
-    <!-- Custom Style (Aproveitando o tema do templo) -->
+    <!-- Quill WYSIWYG Editor CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/quill@2.0.3/dist/quill.snow.css" rel="stylesheet">
+    <!-- Custom Style -->
     <link href="style.css" rel="stylesheet">
     <style>
-        .admin-card {
-            background: rgba(20, 20, 20, 0.85);
-            border: 1px solid rgba(212, 175, 55, 0.4);
-        }
-        .nav-tabs .nav-link {
-            color: var(--text-muted);
-            border: none;
-            border-bottom: 2px solid transparent;
-            font-weight: 500;
-        }
-        .nav-tabs .nav-link.active {
-            background-color: transparent !important;
-            color: var(--gold) !important;
-            border: none;
-            border-bottom: 2px solid var(--gold);
-        }
-        .table-dark {
-            background-color: transparent !important;
-        }
-        .table-dark th {
-            color: var(--gold);
-            border-bottom: 2px solid var(--gold);
-        }
-        .table-dark td {
-            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-        }
-        .group-header {
-            background-color: rgba(140, 20, 20, 0.25);
-            border-left: 4px solid var(--gold);
-            padding: 0.6rem 1rem;
-            margin: 1.5rem 0 0.8rem 0;
-            border-radius: 4px;
-            font-weight: bold;
-            color: var(--text-light);
-        }
+        body { -webkit-user-select: auto; user-select: auto; }
+        .nav-tabs { border-bottom: 1px solid rgba(212,175,55,0.2); }
+        textarea.form-control { -webkit-user-select: auto; user-select: auto; }
     </style>
 </head>
 <body class="py-4">
@@ -191,7 +220,7 @@ if ($is_logged) {
         <!-- Cabeçalho -->
         <header class="text-center mb-4">
             <h1 class="temple-title h2 mb-1">Painel Administrativo</h1>
-            <p class="text-uppercase tracking-widest text-muted small">Templo TUDO TEKEM</p>
+            <p class="small text-uppercase mb-0" style="letter-spacing: 3px; color: var(--text-muted);">Templo TUDO TEKEM</p>
         </header>
 
         <?php if (!$is_logged): ?>
@@ -203,7 +232,7 @@ if ($is_logged) {
                             <i class="fa-solid fa-lock"></i>
                         </div>
                         <h2 class="h4 mb-4 text-white">Acesso Restrito</h2>
-                        
+
                         <?php if ($login_error): ?>
                             <div class="alert alert-danger py-2 text-center" role="alert">
                                 <i class="fa-solid fa-circle-exclamation me-2"></i><?= htmlspecialchars($login_error) ?>
@@ -223,11 +252,12 @@ if ($is_logged) {
                     </div>
                 </div>
             </div>
+
         <?php else: ?>
             <!-- Painel Administrativo Autenticado -->
             <div class="row justify-content-center">
-                <div class="col-lg-10">
-                    
+                <div class="col-lg-11">
+
                     <!-- Alertas de Sucesso / Erro -->
                     <?php if ($success_message): ?>
                         <div class="alert alert-success alert-dismissible fade show" role="alert">
@@ -245,139 +275,254 @@ if ($is_logged) {
                     <div class="glass-panel admin-card p-4">
                         <!-- Barra Superior com botão de logout -->
                         <div class="d-flex justify-content-between align-items-center mb-4 border-bottom border-secondary pb-3">
-                            <span class="text-white fs-5"><i class="fa-solid fa-user-shield text-warning me-2"></i>Sessão Admin Ativa</span>
-                            <a href="admin.php?action=logout" class="btn btn-outline-danger btn-sm">
-                                Sair <i class="fa-solid fa-right-from-bracket ms-1"></i>
-                            </a>
+                            <span class="text-white fs-5">
+                                <i class="fa-solid fa-user-shield text-warning me-2"></i>Sessão Admin Ativa
+                            </span>
+                            <div class="d-flex gap-2">
+                                <a href="index.php" class="btn btn-outline-secondary btn-sm" target="_blank">
+                                    <i class="fa-solid fa-eye me-1"></i>Ver Quiosque
+                                </a>
+                                <a href="admin.php?action=logout" class="btn btn-outline-danger btn-sm">
+                                    Sair <i class="fa-solid fa-right-from-bracket ms-1"></i>
+                                </a>
+                            </div>
                         </div>
 
                         <!-- Abas de Navegação -->
                         <ul class="nav nav-tabs mb-4" id="adminTabs" role="tablist">
                             <li class="nav-item" role="presentation">
-                                <button class="nav-link active" id="historico-tab" data-bs-toggle="tab" data-bs-target="#historico" type="button" role="tab" aria-controls="historico" aria-selected="true">
-                                    <i class="fa-solid fa-clock-history me-2"></i>Histórico de Assinaturas
+                                <button class="nav-link active" id="dashboard-tab" data-bs-toggle="tab" data-bs-target="#dashboard" type="button" role="tab">
+                                    <i class="fa-solid fa-chart-pie me-2"></i>Dashboard
                                 </button>
                             </li>
                             <li class="nav-item" role="presentation">
-                                <button class="nav-link" id="termo-tab" data-bs-toggle="tab" data-bs-target="#termo" type="button" role="tab" aria-controls="termo" aria-selected="false">
+                                <button class="nav-link" id="historico-tab" data-bs-toggle="tab" data-bs-target="#historico" type="button" role="tab">
+                                    <i class="fa-solid fa-clock-history me-2"></i>Assinaturas
+                                </button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link" id="gira-tab" data-bs-toggle="tab" data-bs-target="#gira" type="button" role="tab">
+                                    <i class="fa-solid fa-fire me-2"></i>Gira do Dia
+                                </button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link" id="termo-tab" data-bs-toggle="tab" data-bs-target="#termo" type="button" role="tab">
                                     <i class="fa-solid fa-file-signature me-2"></i>Editar Termos
-                                </button>
-                            </li>
-                            <li class="nav-item" role="presentation">
-                                <button class="nav-link" id="gira-tab" data-bs-toggle="tab" data-bs-target="#gira" type="button" role="tab" aria-controls="gira" aria-selected="false">
-                                    <i class="fa-solid fa-image me-2"></i>Gira do Dia
                                 </button>
                             </li>
                         </ul>
 
                         <!-- Conteúdo das Abas -->
                         <div class="tab-content" id="adminTabsContent">
-                            
-                            <!-- Aba 1: Histórico de Visitantes -->
-                            <div class="tab-pane fade show active" id="historico" role="tabpanel" aria-labelledby="historico-tab">
-                                <h3 class="h5 mb-4 text-warning">Visitantes Registrados</h3>
-                                
+
+                            <!-- ═══ ABA 1: DASHBOARD ═══ -->
+                            <div class="tab-pane fade show active" id="dashboard" role="tabpanel">
+                                <h3 class="h5 mb-4 text-warning"><i class="fa-solid fa-gauge-high me-2"></i>Visão Geral</h3>
+
+                                <div class="row g-3 mb-4">
+                                    <!-- Stat: Total Hoje -->
+                                    <div class="col-md-4">
+                                        <div class="stat-card">
+                                            <div class="stat-icon"><i class="fa-solid fa-calendar-day"></i></div>
+                                            <div class="stat-number"><?= $total_hoje ?></div>
+                                            <div class="stat-label">Assinaturas Hoje</div>
+                                        </div>
+                                    </div>
+                                    <!-- Stat: Total Geral -->
+                                    <div class="col-md-4">
+                                        <div class="stat-card">
+                                            <div class="stat-icon"><i class="fa-solid fa-users"></i></div>
+                                            <div class="stat-number"><?= $total_geral ?></div>
+                                            <div class="stat-label">Total de Assinaturas</div>
+                                        </div>
+                                    </div>
+                                    <!-- Stat: Gira Ativa -->
+                                    <div class="col-md-4">
+                                        <div class="stat-card">
+                                            <div class="stat-icon"><i class="fa-solid fa-fire"></i></div>
+                                            <div class="stat-number" style="font-size: 1.1rem; padding-top: 0.5rem;">
+                                                <?= !empty($gira_titulo_atual) ? htmlspecialchars($gira_titulo_atual) : '<span style="font-size:0.85rem;color:var(--text-muted)">Sem título</span>' ?>
+                                            </div>
+                                            <div class="stat-label">Gira do Dia</div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Última assinatura -->
+                                <?php if ($ultima_assinatura): ?>
+                                <div class="p-3 rounded" style="background: rgba(0,0,0,0.3); border: 1px solid rgba(212,175,55,0.15);">
+                                    <p class="text-muted small mb-1"><i class="fa-regular fa-clock me-1"></i>Última assinatura registrada:</p>
+                                    <p class="text-white mb-0 fs-5 fw-bold">
+                                        <?= htmlspecialchars($ultima_assinatura['nome'] . ' ' . $ultima_assinatura['sobrenome']) ?>
+                                        <small class="text-muted fw-normal ms-2" style="font-size: 0.8rem;">
+                                            <?= date('d/m/Y \à\s H:i', strtotime($ultima_assinatura['data_hora'])) ?>
+                                        </small>
+                                    </p>
+                                </div>
+                                <?php else: ?>
+                                <div class="text-center py-4 text-muted">
+                                    <i class="fa-solid fa-inbox d-block fs-1 mb-3 opacity-50"></i>
+                                    Nenhuma assinatura registrada ainda.
+                                </div>
+                                <?php endif; ?>
+
+                                <!-- Atalhos rápidos -->
+                                <div class="mt-4">
+                                    <p class="text-muted small mb-2">Atalhos rápidos:</p>
+                                    <div class="d-flex gap-2 flex-wrap">
+                                        <button class="btn btn-sm btn-outline-warning" onclick="document.getElementById('gira-tab').click()">
+                                            <i class="fa-solid fa-fire me-1"></i>Configurar Gira
+                                        </button>
+                                        <button class="btn btn-sm btn-outline-warning" onclick="document.getElementById('historico-tab').click()">
+                                            <i class="fa-solid fa-list me-1"></i>Ver Assinaturas
+                                        </button>
+                                        <a href="admin.php?action=export_csv" class="btn btn-sm btn-outline-success">
+                                            <i class="fa-solid fa-file-csv me-1"></i>Exportar Tudo (CSV)
+                                        </a>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- ═══ ABA 2: HISTÓRICO DE ASSINATURAS ═══ -->
+                            <div class="tab-pane fade" id="historico" role="tabpanel">
+                                <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-4">
+                                    <h3 class="h5 text-warning mb-0"><i class="fa-solid fa-list me-2"></i>Visitantes Registrados</h3>
+                                    <div class="d-flex gap-2 align-items-center flex-wrap">
+                                        <!-- Filtro de data -->
+                                        <form method="GET" action="admin.php" class="d-flex gap-2 align-items-center">
+                                            <input type="hidden" name="tab" value="historico">
+                                            <input type="date" name="data_filtro" value="<?= htmlspecialchars($data_filtro) ?>"
+                                                   class="form-control form-control-sm"
+                                                   style="width: 160px; font-size: 0.85rem; padding: 0.3rem 0.6rem;">
+                                            <button type="submit" class="btn btn-sm btn-outline-warning">
+                                                <i class="fa-solid fa-filter me-1"></i>Filtrar
+                                            </button>
+                                            <?php if (!empty($data_filtro)): ?>
+                                                <a href="admin.php" class="btn btn-sm btn-outline-secondary">
+                                                    <i class="fa-solid fa-xmark"></i>
+                                                </a>
+                                            <?php endif; ?>
+                                        </form>
+                                        <!-- Exportar CSV -->
+                                        <a href="admin.php?action=export_csv<?= !empty($data_filtro) ? '&data_filtro=' . urlencode($data_filtro) : '' ?>" class="btn btn-sm btn-outline-success">
+                                            <i class="fa-solid fa-file-csv me-1"></i>CSV
+                                        </a>
+                                    </div>
+                                </div>
+
                                 <?php if (empty($visitantes)): ?>
                                     <div class="text-center py-5 text-muted">
                                         <i class="fa-solid fa-users-slash d-block fs-1 mb-3"></i>
-                                        Nenhum visitante assinou o termo até o momento.
+                                        Nenhum visitante encontrado<?= !empty($data_filtro) ? ' nesta data.' : ' até o momento.' ?>
                                     </div>
                                 <?php else: ?>
-                                    <div class="table-responsive" style="max-height: 50vh; overflow-y: auto;">
+                                    <div class="table-responsive" style="max-height: 55vh; overflow-y: auto;">
                                         <?php
-                                        // Agrupamento de visitantes por data
                                         $data_atual_agrupamento = '';
                                         foreach ($visitantes as $v):
-                                            $data_checkin = date('Y-m-d', strtotime($v['data_hora']));
+                                            $data_checkin           = date('Y-m-d', strtotime($v['data_hora']));
                                             $data_checkin_formatada = date('d/m/Y', strtotime($v['data_hora']));
-                                            
+
                                             if ($data_checkin !== $data_atual_agrupamento) {
                                                 if ($data_atual_agrupamento !== '') {
-                                                    echo '</tbody></table>'; // Fecha tabela anterior se houver
+                                                    echo '</tbody></table>';
                                                 }
                                                 $data_atual_agrupamento = $data_checkin;
                                                 echo "<div class='group-header'><i class='fa-regular fa-calendar-days me-2'></i>{$data_checkin_formatada}</div>";
                                                 echo '<table class="table table-dark table-striped table-hover align-middle mb-4">
                                                         <thead>
                                                             <tr>
-                                                                <th style="width: 25%">ID</th>
-                                                                <th style="width: 45%">Nome Completo</th>
-                                                                <th style="width: 30%">Horário de Entrada</th>
+                                                                <th style="width: 20%">ID</th>
+                                                                <th style="width: 50%">Nome Completo</th>
+                                                                <th style="width: 30%">Horário</th>
                                                             </tr>
                                                         </thead>
                                                         <tbody>';
                                             }
                                             $horario_checkin = date('H:i:s', strtotime($v['data_hora']));
-                                            $nome_completo = $v['nome'] . ' ' . $v['sobrenome'];
+                                            $nome_completo   = $v['nome'] . ' ' . $v['sobrenome'];
                                         ?>
                                             <tr>
                                                 <td class="text-muted small"><?= htmlspecialchars($v['id']) ?></td>
                                                 <td class="fw-bold text-white"><?= htmlspecialchars($nome_completo) ?></td>
                                                 <td><i class="fa-regular fa-clock text-warning me-2"></i><?= htmlspecialchars($horario_checkin) ?></td>
                                             </tr>
-                                        <?php endforeach; 
+                                        <?php endforeach;
                                         if ($data_atual_agrupamento !== '') {
-                                            echo '</tbody></table>'; // Fecha última tabela
+                                            echo '</tbody></table>';
                                         }
                                         ?>
                                     </div>
+                                    <p class="text-muted small text-end mt-1">
+                                        <?= count($visitantes) ?> registro(s) encontrado(s)
+                                        <?= !empty($data_filtro) ? 'em ' . date('d/m/Y', strtotime($data_filtro)) : '' ?>
+                                    </p>
                                 <?php endif; ?>
                             </div>
 
-                            <!-- Aba 2: Editar Termos -->
-                            <div class="tab-pane fade" id="termo" role="tabpanel" aria-labelledby="termo-tab">
-                                <h3 class="h5 mb-3 text-warning">Gerenciar Texto do Termo</h3>
-                                <p class="text-muted small mb-3">Você pode utilizar marcação HTML (tags como &lt;strong&gt;, &lt;p&gt;, &lt;ol&gt;, &lt;li&gt;) para manter a formatação visual na página de exibição.</p>
-                                
-                                <form action="admin.php" method="POST">
-                                    <input type="hidden" name="admin_action" value="save_terms">
-                                    <div class="mb-4">
-                                        <textarea class="form-control" name="termo_texto" rows="12" style="font-family: monospace; font-size: 0.95rem; background: rgba(10,10,10,0.85); color: #fff;" required><?= htmlspecialchars($termo_atual) ?></textarea>
-                                    </div>
-                                    <div class="text-end">
-                                        <button type="submit" class="btn btn-confirm px-4">
-                                            <i class="fa-solid fa-save me-2"></i>Salvar Termos
-                                        </button>
-                                    </div>
-                                </form>
-                            </div>
+                            <!-- ═══ ABA 3: GIRA DO DIA ═══ -->
+                            <div class="tab-pane fade" id="gira" role="tabpanel">
+                                <h3 class="h5 mb-4 text-warning"><i class="fa-solid fa-fire me-2"></i>Configurar Gira do Dia</h3>
 
-                            <!-- Aba 3: Gira do Dia -->
-                            <div class="tab-pane fade" id="gira" role="tabpanel" aria-labelledby="gira-tab">
-                                <h3 class="h5 mb-4 text-warning">Imagem da Gira do Dia</h3>
-                                
-                                <div class="row">
-                                    <div class="col-md-6 mb-4">
-                                        <h4 class="h6 text-muted mb-3">Imagem Ativa</h4>
+                                <div class="row g-4">
+                                    <!-- Coluna: imagem ativa -->
+                                    <div class="col-md-5">
+                                        <h4 class="h6 mb-3" style="color: var(--text-muted);">Imagem Ativa</h4>
                                         <?php if (!empty($gira_imagem_atual) && file_exists($gira_imagem_atual)): ?>
                                             <div class="gira-frame text-center" style="max-width: 100%;">
-                                                <img src="<?= htmlspecialchars($gira_imagem_atual) ?>" alt="Gira do Dia" class="gira-image" style="height: 250px;">
+                                                <img src="<?= htmlspecialchars($gira_imagem_atual) ?>" alt="Gira do Dia" class="gira-image" style="height: 220px;">
                                             </div>
+                                            <?php if (!empty($gira_titulo_atual)): ?>
+                                                <p class="text-center mt-2 small" style="color: var(--gold-light);">
+                                                    <i class="fa-solid fa-fire me-1"></i><?= htmlspecialchars($gira_titulo_atual) ?>
+                                                </p>
+                                            <?php endif; ?>
                                             <form action="admin.php" method="POST" class="mt-3 text-center">
                                                 <input type="hidden" name="admin_action" value="remove_gira">
                                                 <button type="submit" class="btn btn-refuse btn-sm">
-                                                    <i class="fa-solid fa-trash-can me-2"></i>Remover Imagem e Usar Logo Padrão
+                                                    <i class="fa-solid fa-trash-can me-2"></i>Remover Gira e Usar Logo Padrão
                                                 </button>
                                             </form>
                                         <?php else: ?>
                                             <div class="p-4 border border-secondary rounded text-center text-muted" style="background: rgba(0,0,0,0.25);">
                                                 <i class="fa-solid fa-image-portrait d-block fs-1 mb-2"></i>
-                                                Nenhuma imagem de gira cadastrada.<br>
+                                                Nenhuma imagem cadastrada.<br>
                                                 O sistema exibirá a logo padrão <strong>Logo TT TEKEM.png</strong>.
                                             </div>
                                         <?php endif; ?>
                                     </div>
-                                    <div class="col-md-6">
-                                        <h4 class="h6 text-muted mb-3">Subir Nova Imagem</h4>
+
+                                    <!-- Coluna: novo upload + título -->
+                                    <div class="col-md-7">
+                                        <h4 class="h6 mb-3" style="color: var(--text-muted);">Definir Gira do Dia</h4>
                                         <div class="p-4 border border-secondary rounded" style="background: rgba(0,0,0,0.25);">
                                             <form action="admin.php" method="POST" enctype="multipart/form-data">
                                                 <input type="hidden" name="admin_action" value="upload_gira">
-                                                <div class="mb-4">
-                                                    <label for="gira_file" class="form-label">Selecione uma imagem (JPG, PNG, WEBP)</label>
-                                                    <input class="form-control" type="file" id="gira_file" name="gira_file" accept=".jpg,.jpeg,.png,.webp" required>
+
+                                                <!-- Título da Gira -->
+                                                <div class="mb-3">
+                                                    <label for="gira_titulo" class="form-label">
+                                                        <i class="fa-solid fa-tag me-1"></i>Título da Gira
+                                                    </label>
+                                                    <input type="text" class="form-control" id="gira_titulo" name="gira_titulo"
+                                                           placeholder="Ex: Gira de Exu Mirim"
+                                                           value="<?= htmlspecialchars($gira_titulo_atual) ?>">
+                                                    <div class="form-text" style="color: var(--text-muted);">
+                                                        Aparece no quiosque abaixo da imagem.
+                                                    </div>
                                                 </div>
+
+                                                <!-- Upload de Imagem -->
+                                                <div class="mb-4">
+                                                    <label for="gira_file" class="form-label">
+                                                        <i class="fa-solid fa-image me-1"></i>Imagem da Gira <span class="fw-normal text-muted">(opcional)</span>
+                                                    </label>
+                                                    <input class="form-control" type="file" id="gira_file" name="gira_file" accept=".jpg,.jpeg,.png,.webp">
+                                                    <div class="form-text" style="color: var(--text-muted);">JPG, PNG ou WEBP. Deixe em branco para apenas atualizar o título.</div>
+                                                </div>
+
                                                 <button type="submit" class="btn btn-confirm w-100">
-                                                    <i class="fa-solid fa-cloud-arrow-up me-2"></i>Fazer Upload da Imagem
+                                                    <i class="fa-solid fa-cloud-arrow-up me-2"></i>Salvar Gira do Dia
                                                 </button>
                                             </form>
                                         </div>
@@ -385,19 +530,86 @@ if ($is_logged) {
                                 </div>
                             </div>
 
-                        </div> <!-- /tab-content -->
-                    </div> <!-- /glass-panel -->
+                            <!-- ═══ ABA 4: EDITAR TERMOS (WYSIWYG) ═══ -->
+                            <div class="tab-pane fade" id="termo" role="tabpanel">
+                                <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+                                    <h3 class="h5 text-warning mb-0"><i class="fa-solid fa-file-signature me-2"></i>Editor de Termos</h3>
+                                    <span class="badge text-bg-secondary">Editor Visual — sem necessidade de código HTML</span>
+                                </div>
+                                <p class="small mb-3" style="color: var(--text-muted);">
+                                    Use a barra de ferramentas abaixo para formatar o texto. O conteúdo é salvo automaticamente em formato compatível com a página de assinatura.
+                                </p>
+
+                                <form action="admin.php" method="POST" id="termosForm">
+                                    <input type="hidden" name="admin_action" value="save_terms">
+                                    <!-- Campo oculto onde o Quill insere o HTML -->
+                                    <input type="hidden" name="termo_texto" id="termo_texto_hidden">
+
+                                    <!-- Editor Quill -->
+                                    <div id="quillEditor" style="min-height: 300px;"></div>
+
+                                    <div class="text-end mt-3">
+                                        <button type="submit" class="btn btn-confirm px-4" id="salvarTermosBtn">
+                                            <i class="fa-solid fa-save me-2"></i>Salvar Termos
+                                        </button>
+                                    </div>
+                                </form>
+                            </div>
+
+                        </div><!-- /tab-content -->
+                    </div><!-- /glass-panel -->
                 </div>
             </div>
         <?php endif; ?>
 
         <!-- Rodapé -->
-        <footer class="text-center text-muted small mt-4">
-            &copy; <?= date('Y') ?> Templo TUDO TEKEM • Painel Administrativo
+        <footer class="text-center small mt-4" style="color: var(--text-muted);">
+            &copy; <?= date('Y') ?> Templo TUDO TEKEM &bull; Painel Administrativo
         </footer>
     </div>
 
-    <!-- Bootstrap 5 JS Bundle with Popper -->
+    <!-- Bootstrap 5 JS -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    <!-- Quill WYSIWYG Editor JS -->
+    <script src="https://cdn.jsdelivr.net/npm/quill@2.0.3/dist/quill.js"></script>
+
+    <?php if ($is_logged): ?>
+    <script>
+        /* ── Restaurar aba ativa via URL hash ── */
+        const urlParams = new URLSearchParams(window.location.search);
+        const tabParam  = urlParams.get('tab');
+        if (tabParam) {
+            const tabEl = document.getElementById(tabParam + '-tab');
+            if (tabEl) new bootstrap.Tab(tabEl).show();
+        }
+
+        /* ── Quill WYSIWYG Editor ── */
+        const initialContent = <?= json_encode($termo_atual) ?>;
+
+        const quill = new Quill('#quillEditor', {
+            theme: 'snow',
+            modules: {
+                toolbar: [
+                    [{ 'header': [1, 2, 3, false] }],
+                    ['bold', 'italic', 'underline', 'strike'],
+                    [{ 'color': [] }, { 'background': [] }],
+                    [{ 'list': 'ordered' }, { 'list': 'bullet' }],
+                    [{ 'indent': '-1' }, { 'indent': '+1' }],
+                    ['blockquote', 'link'],
+                    ['clean']
+                ]
+            },
+            placeholder: 'Digite o texto dos termos aqui...'
+        });
+
+        // Carrega o conteúdo HTML existente no editor
+        quill.clipboard.dangerouslyPasteHTML(initialContent || '');
+
+        // Antes de submeter, copia o HTML do Quill para o campo hidden
+        document.getElementById('termosForm').addEventListener('submit', function(e) {
+            document.getElementById('termo_texto_hidden').value = quill.root.innerHTML;
+        });
+    </script>
+    <?php endif; ?>
 </body>
 </html>

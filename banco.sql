@@ -24,3 +24,7 @@ ON DUPLICATE KEY UPDATE valor = VALUES(valor);
 INSERT INTO configuracoes (chave, valor) VALUES 
 ('gira_imagem', '')
 ON DUPLICATE KEY UPDATE valor = VALUES(valor);
+
+INSERT INTO configuracoes (chave, valor) VALUES 
+('gira_titulo', '')
+ON DUPLICATE KEY UPDATE valor = VALUES(valor);

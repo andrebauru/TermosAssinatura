@@ -3,6 +3,11 @@
 !/uploads/.gitkeep
 
 # Ignore OS files
+config.php
 Thumbs.db
 Desktop.ini
 .DS_Store
+
+# Pastas de dados de usuários e arquivos enviados
+/uploads/
+/Files/

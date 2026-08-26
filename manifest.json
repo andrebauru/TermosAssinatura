@@ -1,0 +1,24 @@
+{
+  "name": "Templo TUDO TEKEM – Check-in",
+  "short_name": "TEKEM",
+  "description": "Sistema de check-in e assinatura digital do Templo TUDO TEKEM",
+  "start_url": "/index.php",
+  "display": "fullscreen",
+  "orientation": "portrait",
+  "background_color": "#0f0f0f",
+  "theme_color": "#d4af37",
+  "icons": [
+    {
+      "src": "Files/Logo TT TEKEM.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "Files/Logo TT TEKEM.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

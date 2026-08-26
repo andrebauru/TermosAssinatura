@@ -26,7 +26,14 @@ if (!empty($gira_imagem) && file_exists($gira_imagem)) {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="TEKEM">
+    <meta name="theme-color" content="#0f0f0f">
     <title>Check-in | Templo TUDO TEKEM</title>
+    <!-- PWA Manifest -->
+    <link rel="manifest" href="manifest.json">
     <!-- Bootstrap 5 CSS -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <!-- Font Awesome Icons -->
@@ -86,7 +93,7 @@ if (!empty($gira_imagem) && file_exists($gira_imagem)) {
 
         <!-- Conteúdo Central -->
         <main class="text-center my-auto">
-            <div class="glass-panel mx-auto" style="max-width: 620px;">
+            <div class="glass-panel mx-auto" style="max-width: 640px;">
                 <h2 class="h4 mb-3 text-white"><?= $tem_gira ? 'Gira de Hoje' : 'Bem-vindo ao Templo' ?></h2>
 
                 <!-- Título da Gira (se definido) -->
@@ -106,6 +113,13 @@ if (!empty($gira_imagem) && file_exists($gira_imagem)) {
                 <!-- Separador -->
                 <hr class="section-divider">
 
+                <!-- ★ BOTÃO DE AÇÃO — ACIMA DOS CARDS ★ -->
+                <div class="mb-4">
+                    <a href="termos.php" class="btn btn-pulsate d-inline-block text-decoration-none">
+                        Toque aqui para assinar <i class="fa-solid fa-signature ms-2"></i>
+                    </a>
+                </div>
+
                 <!-- Mestres da Casa -->
                 <div class="mb-3">
                     <p class="section-label"><i class="fa-solid fa-star me-1"></i>Mestres da Casa</p>
@@ -124,7 +138,7 @@ if (!empty($gira_imagem) && file_exists($gira_imagem)) {
                 </div>
 
                 <!-- Entidades Chefes -->
-                <div class="mb-4">
+                <div class="mb-3">
                     <p class="section-label"><i class="fa-solid fa-khanda me-1"></i>Entidades Chefes</p>
                     <div class="masters-section">
                         <div class="entity-card">
@@ -133,19 +147,18 @@ if (!empty($gira_imagem) && file_exists($gira_imagem)) {
                             <span class="entity-role">Entidade Chefe</span>
                         </div>
                         <div class="entity-card">
-                            <span class="entity-icon"><i class="fa-solid fa-bolt"></i></span>
+                            <!-- Ícone de navalha SVG customizado -->
+                            <span class="entity-icon">
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="1.5rem" height="1.5rem" fill="currentColor" style="display:inline-block;vertical-align:middle;">
+                                    <path d="M20.5 2C19.12 2 18 3.12 18 4.5c0 .68.28 1.29.73 1.73L5.46 19.5 4 21l1.5.5 1.04-1.04 1.27 1.27.71-.71-1.27-1.27 1.77-1.77 1.27 1.27.71-.71-1.27-1.27 1.77-1.77 1.27 1.27.71-.71-1.27-1.27L20.5 7c.39.0.76-.08 1.1-.22C22.41 6.36 23 5.5 23 4.5 23 3.12 21.88 2 20.5 2zm0 3.5c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1z"/>
+                                </svg>
+                            </span>
                             <span class="entity-name">Zé Navalha</span>
                             <span class="entity-role">Entidade Chefe</span>
                         </div>
                     </div>
                 </div>
 
-                <!-- Botão de Ação -->
-                <div class="mt-2">
-                    <a href="termos.php" class="btn btn-pulsate d-inline-block text-decoration-none">
-                        Toque aqui para assinar <i class="fa-solid fa-signature ms-2"></i>
-                    </a>
-                </div>
             </div>
         </main>
 
@@ -158,39 +171,29 @@ if (!empty($gira_imagem) && file_exists($gira_imagem)) {
     <!-- Bootstrap 5 JS -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 
+    <!-- Módulo de Quiosque (PWA + fullscreen persistente + wake lock) -->
+    <script src="kiosk.js"></script>
+
     <script>
-        /* ── Fullscreen Toggle ── */
+        /* ── Fullscreen Toggle (botão manual) ── */
         const fullscreenToggle = document.getElementById('fullscreenToggle');
         const fullscreenIcon   = document.getElementById('fullscreenIcon');
 
         fullscreenToggle.addEventListener('click', () => {
             if (!document.fullscreenElement) {
-                document.documentElement.requestFullscreen().then(() => {
-                    fullscreenIcon.classList.replace('fa-expand', 'fa-compress');
-                }).catch(err => console.error(err));
-            } else {
-                document.exitFullscreen().then(() => {
-                    fullscreenIcon.classList.replace('fa-compress', 'fa-expand');
-                });
+                KioskMode.enter();
             }
+            // Não permite sair pelo botão — apenas pela senha
         });
 
-        document.addEventListener('fullscreenchange', () => {
-            if (!document.fullscreenElement) {
-                fullscreenIcon.classList.replace('fa-compress', 'fa-expand');
-            } else {
-                fullscreenIcon.classList.replace('fa-expand', 'fa-compress');
-            }
-        });
-
-        /* ── Exit Modal (senha 2307) ── */
-        const EXIT_PASSWORD      = '2307';
-        const exitBtn            = document.getElementById('exitBtn');
-        const exitModalOverlay   = document.getElementById('exitModalOverlay');
-        const exitPinInput       = document.getElementById('exitPinInput');
-        const exitErrorMsg       = document.getElementById('exitErrorMsg');
-        const exitCancelBtn      = document.getElementById('exitCancelBtn');
-        const exitConfirmBtn     = document.getElementById('exitConfirmBtn');
+        /* ── Exit Modal (senha protegida) ── */
+        const EXIT_PASSWORD    = '2307';
+        const exitBtn          = document.getElementById('exitBtn');
+        const exitModalOverlay = document.getElementById('exitModalOverlay');
+        const exitPinInput     = document.getElementById('exitPinInput');
+        const exitErrorMsg     = document.getElementById('exitErrorMsg');
+        const exitCancelBtn    = document.getElementById('exitCancelBtn');
+        const exitConfirmBtn   = document.getElementById('exitConfirmBtn');
 
         function openExitModal() {
             exitPinInput.value = '';
@@ -207,11 +210,7 @@ if (!empty($gira_imagem) && file_exists($gira_imagem)) {
         function tryExit() {
             if (exitPinInput.value === EXIT_PASSWORD) {
                 closeExitModal();
-                if (document.fullscreenElement) {
-                    document.exitFullscreen().then(() => {
-                        fullscreenIcon.classList.replace('fa-compress', 'fa-expand');
-                    });
-                }
+                KioskMode.exit();    // libera o fullscreen com permissão
             } else {
                 exitPinInput.classList.add('error');
                 exitErrorMsg.textContent = 'Senha incorreta. Tente novamente.';
@@ -226,13 +225,19 @@ if (!empty($gira_imagem) && file_exists($gira_imagem)) {
 
         exitPinInput.addEventListener('keydown', (e) => {
             if (e.key === 'Enter') tryExit();
-            if (e.key === 'Escape') closeExitModal();
+            // Escape no campo de senha só fecha o modal (não sai do fullscreen)
+            if (e.key === 'Escape') { e.stopPropagation(); closeExitModal(); }
         });
 
         // Fechar clicando fora do box
         exitModalOverlay.addEventListener('click', (e) => {
             if (e.target === exitModalOverlay) closeExitModal();
         });
+
+        /* ── Auto-inicia o modo quiosque se já estiver em fullscreen ── */
+        if (document.fullscreenElement) {
+            KioskMode.enter();
+        }
     </script>
 </body>
 </html>

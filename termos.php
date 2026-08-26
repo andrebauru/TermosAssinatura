@@ -15,7 +15,13 @@ try {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="theme-color" content="#0f0f0f">
     <title>Termo de Consentimento | Templo TUDO TEKEM</title>
+    <!-- PWA Manifest -->
+    <link rel="manifest" href="manifest.json">
     <!-- Bootstrap 5 CSS -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <!-- Font Awesome Icons -->
@@ -25,12 +31,17 @@ try {
 </head>
 <body>
 
+    <!-- Logo Animada de Fundo -->
+    <div class="bg-logo-container">
+        <div class="bg-logo"></div>
+    </div>
+
     <div class="container kiosk-container py-3">
         <!-- Cabeçalho -->
         <header class="text-center pt-2 mb-3">
             <h1 class="temple-title h3 mb-1">Templo TUDO TEKEM</h1>
             <p class="text-uppercase tracking-widest text-muted small mb-0" style="letter-spacing: 2px;">
-                Consentimento Digital
+                Consentimento Digital e Legal
             </p>
         </header>
 
@@ -87,8 +98,20 @@ try {
     <!-- Bootstrap 5 JS -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 
+    <!-- Módulo de Quiosque (mantém fullscreen nesta página também) -->
+    <script src="kiosk.js"></script>
+
     <!-- Scripts de Interação -->
     <script>
+        /* ── Mantém o modo quiosque ao navegar para esta página ── */
+        // Solicita fullscreen assim que a página carrega (browser permite após navegação
+        // iniciada pelo usuário na página anterior)
+        window.addEventListener('load', () => {
+            if (!document.fullscreenElement) {
+                KioskMode.enter();
+            }
+        });
+
         // Função de rolagem suave até o formulário no rodapé
         const btnScrollDown = document.getElementById('btnScrollDown');
         const formRodape = document.getElementById('formRodape');
@@ -107,7 +130,7 @@ try {
             });
         });
 
-        // Evento do botão Recusar
+        // Evento do botão Recusar — volta para index mantendo o quiosque
         const btnRecusar = document.getElementById('btnRecusar');
         btnRecusar.addEventListener('click', () => {
             alert("Por favor, chame um assistente do trabalho.");

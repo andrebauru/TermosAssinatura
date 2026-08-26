@@ -2,9 +2,13 @@
 require_once 'config.php';
 
 $termo_texto = '';
+$solicitar_geo = false;
 try {
-    $stmt = $pdo->query("SELECT valor FROM configuracoes WHERE chave = 'termo_texto'");
-    $termo_texto = $stmt->fetchColumn();
+    $stmt = $pdo->query("SELECT chave, valor FROM configuracoes WHERE chave IN ('termo_texto','solicitar_geolocalizacao')");
+    foreach ($stmt->fetchAll(PDO::FETCH_KEY_PAIR) as $k => $v) {
+        if ($k === 'termo_texto') $termo_texto = $v;
+        if ($k === 'solicitar_geolocalizacao') $solicitar_geo = ($v === '1');
+    }
 } catch (PDOException $e) {
     // Fallback de segurança se o banco estiver indisponível
     $termo_texto = '<p class="text-danger fw-bold">Erro ao conectar com o banco de dados para recuperar o termo de responsabilidade. Por favor, acione um assistente.</p>';
@@ -64,6 +68,10 @@ try {
 
                 <!-- Formulário de Consentimento -->
                 <form action="processa.php" method="POST" id="formConsentimento" class="mt-2">
+                    <!-- Campos de geolocalização (hidden) -->
+                    <input type="hidden" name="latitude" id="geoLatitude" value="">
+                    <input type="hidden" name="longitude" id="geoLongitude" value="">
+
                     <div class="row g-3 mb-4" id="formRodape">
                         <div class="col-md-6">
                             <label for="nome" class="form-label">Nome</label>
@@ -111,6 +119,23 @@ try {
                 KioskMode.enter();
             }
         });
+
+        /* ── Geolocalização ── */
+        const SOLICITAR_GEO = <?= $solicitar_geo ? 'true' : 'false' ?>;
+
+        if (SOLICITAR_GEO && 'geolocation' in navigator) {
+            navigator.geolocation.getCurrentPosition(
+                function(pos) {
+                    document.getElementById('geoLatitude').value  = pos.coords.latitude;
+                    document.getElementById('geoLongitude').value = pos.coords.longitude;
+                },
+                function(err) {
+                    // Geolocalização negada ou indisponível — campos ficam vazios (NULL no banco)
+                    console.warn('Geolocalização não disponível:', err.message);
+                },
+                { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
+            );
+        }
 
         // Função de rolagem suave até o formulário no rodapé
         const btnScrollDown = document.getElementById('btnScrollDown');

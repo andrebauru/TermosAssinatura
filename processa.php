@@ -11,6 +11,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $nome = isset($_POST['nome']) ? $_POST['nome'] : '';
     $sobrenome = isset($_POST['sobrenome']) ? $_POST['sobrenome'] : '';
 
+    // Geolocalização (opcional)
+    $latitude  = (!empty($_POST['latitude']) && is_numeric($_POST['latitude']))  ? (float)$_POST['latitude']  : null;
+    $longitude = (!empty($_POST['longitude']) && is_numeric($_POST['longitude'])) ? (float)$_POST['longitude'] : null;
+
     // Remove espaços extras nas extremidades
     $nome = trim($nome);
     $sobrenome = trim($sobrenome);
@@ -23,13 +27,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $id = uniqid('v', false) . bin2hex(random_bytes(4));
 
             // Prepara a consulta SQL para inserção segura
-            $sql = "INSERT INTO visitantes (id, nome, sobrenome) VALUES (:id, :nome, :sobrenome)";
+            $sql = "INSERT INTO visitantes (id, nome, sobrenome, latitude, longitude) VALUES (:id, :nome, :sobrenome, :latitude, :longitude)";
             $stmt = $pdo->prepare($sql);
             
             // Associa os parâmetros
             $stmt->bindValue(':id', $id, PDO::PARAM_STR);
             $stmt->bindValue(':nome', $nome, PDO::PARAM_STR);
             $stmt->bindValue(':sobrenome', $sobrenome, PDO::PARAM_STR);
+            $stmt->bindValue(':latitude', $latitude);
+            $stmt->bindValue(':longitude', $longitude);
             
             // Executa
             $stmt->execute();

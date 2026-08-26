@@ -22,7 +22,7 @@ if (isset($_GET['action']) && $_GET['action'] === 'export_csv' && isset($_SESSIO
             $where = "WHERE DATE(data_hora) = :data_filtro";
             $params[':data_filtro'] = $_GET['data_filtro'];
         }
-        $stmt = $pdo->prepare("SELECT id, nome, sobrenome, data_hora FROM visitantes $where ORDER BY data_hora DESC");
+        $stmt = $pdo->prepare("SELECT id, nome, sobrenome, latitude, longitude, data_hora FROM visitantes $where ORDER BY data_hora DESC");
         $stmt->execute($params);
         $rows = $stmt->fetchAll();
 
@@ -30,9 +30,9 @@ if (isset($_GET['action']) && $_GET['action'] === 'export_csv' && isset($_SESSIO
         header('Content-Disposition: attachment; filename="visitantes_' . date('Y-m-d') . '.csv"');
         $out = fopen('php://output', 'w');
         fprintf($out, chr(0xEF).chr(0xBB).chr(0xBF)); // BOM UTF-8
-        fputcsv($out, ['ID', 'Nome', 'Sobrenome', 'Data/Hora'], ';');
+        fputcsv($out, ['ID', 'Nome', 'Sobrenome', 'Latitude', 'Longitude', 'Data/Hora'], ';');
         foreach ($rows as $row) {
-            fputcsv($out, [$row['id'], $row['nome'], $row['sobrenome'], $row['data_hora']], ';');
+            fputcsv($out, [$row['id'], $row['nome'], $row['sobrenome'], $row['latitude'] ?? '', $row['longitude'] ?? '', $row['data_hora']], ';');
         }
         fclose($out);
         exit;
@@ -141,12 +141,25 @@ if ($is_logged && $_SERVER['REQUEST_METHOD'] === 'POST') {
             $error_message = 'Erro ao atualizar o banco de dados: ' . $e->getMessage();
         }
     }
+
+    // Ação: Toggle Geolocalização
+    if ($action === 'toggle_geolocalizacao') {
+        $novo_valor = isset($_POST['solicitar_geolocalizacao']) ? '1' : '0';
+        try {
+            $stmt = $pdo->prepare("UPDATE configuracoes SET valor = :valor WHERE chave = 'solicitar_geolocalizacao'");
+            $stmt->execute([':valor' => $novo_valor]);
+            $success_message = 'Geolocalização ' . ($novo_valor === '1' ? 'ativada' : 'desativada') . ' com sucesso!';
+        } catch (PDOException $e) {
+            $error_message = 'Erro ao salvar configuração: ' . $e->getMessage();
+        }
+    }
 }
 
 // Recupera informações do banco de dados (se logado)
 $termo_atual        = '';
 $gira_imagem_atual  = '';
 $gira_titulo_atual  = '';
+$solicitar_geo      = false;
 $visitantes         = [];
 $total_hoje         = 0;
 $total_geral        = 0;
@@ -156,11 +169,12 @@ $data_filtro        = isset($_GET['data_filtro']) ? $_GET['data_filtro'] : '';
 if ($is_logged) {
     try {
         // Recupera configurações
-        $stmt = $pdo->query("SELECT chave, valor FROM configuracoes WHERE chave IN ('termo_texto','gira_imagem','gira_titulo')");
+        $stmt = $pdo->query("SELECT chave, valor FROM configuracoes WHERE chave IN ('termo_texto','gira_imagem','gira_titulo','solicitar_geolocalizacao')");
         foreach ($stmt->fetchAll(PDO::FETCH_KEY_PAIR) as $k => $v) {
-            if ($k === 'termo_texto')  $termo_atual       = $v;
-            if ($k === 'gira_imagem')  $gira_imagem_atual = $v;
-            if ($k === 'gira_titulo')  $gira_titulo_atual  = $v;
+            if ($k === 'termo_texto')              $termo_atual       = $v;
+            if ($k === 'gira_imagem')              $gira_imagem_atual = $v;
+            if ($k === 'gira_titulo')              $gira_titulo_atual = $v;
+            if ($k === 'solicitar_geolocalizacao') $solicitar_geo     = ($v === '1');
         }
 
         // Estatísticas
@@ -180,7 +194,7 @@ if ($is_logged) {
             $where  = "WHERE DATE(data_hora) = :data_filtro";
             $params = [':data_filtro' => $data_filtro];
         }
-        $stmt_vis = $pdo->prepare("SELECT id, nome, sobrenome, data_hora FROM visitantes $where ORDER BY data_hora DESC");
+        $stmt_vis = $pdo->prepare("SELECT id, nome, sobrenome, latitude, longitude, data_hora FROM visitantes $where ORDER BY data_hora DESC");
         $stmt_vis->execute($params);
         $visitantes = $stmt_vis->fetchAll();
 
@@ -366,6 +380,37 @@ if ($is_logged) {
                                 </div>
                                 <?php endif; ?>
 
+                                <!-- Toggle de Geolocalização -->
+                                <div class="mt-4 p-3 rounded" style="background: rgba(0,0,0,0.3); border: 1px solid rgba(212,175,55,0.15);">
+                                    <form action="admin.php" method="POST" class="d-flex align-items-center justify-content-between flex-wrap gap-2">
+                                        <input type="hidden" name="admin_action" value="toggle_geolocalizacao">
+                                        <div>
+                                            <p class="text-white mb-1 fw-bold">
+                                                <i class="fa-solid fa-location-dot text-warning me-2"></i>Solicitar Geolocalização
+                                            </p>
+                                            <p class="text-muted small mb-0">
+                                                Quando ativado, o sistema solicita a localização do visitante no check-in.
+                                            </p>
+                                        </div>
+                                        <div class="d-flex align-items-center gap-3">
+                                            <div class="form-check form-switch">
+                                                <input class="form-check-input" type="checkbox" role="switch" id="geoSwitch"
+                                                       name="solicitar_geolocalizacao" value="1"
+                                                       <?= $solicitar_geo ? 'checked' : '' ?>
+                                                       style="width: 3rem; height: 1.5rem; cursor: pointer;">
+                                                <label class="form-check-label ms-2" for="geoSwitch" style="cursor: pointer;">
+                                                    <span class="badge <?= $solicitar_geo ? 'text-bg-success' : 'text-bg-secondary' ?>">
+                                                        <?= $solicitar_geo ? 'Ativado' : 'Desativado' ?>
+                                                    </span>
+                                                </label>
+                                            </div>
+                                            <button type="submit" class="btn btn-sm btn-outline-warning">
+                                                <i class="fa-solid fa-save me-1"></i>Salvar
+                                            </button>
+                                        </div>
+                                    </form>
+                                </div>
+
                                 <!-- Atalhos rápidos -->
                                 <div class="mt-4">
                                     <p class="text-muted small mb-2">Atalhos rápidos:</p>
@@ -432,19 +477,33 @@ if ($is_logged) {
                                                 echo '<table class="table table-dark table-striped table-hover align-middle mb-4">
                                                         <thead>
                                                             <tr>
-                                                                <th style="width: 20%">ID</th>
-                                                                <th style="width: 50%">Nome Completo</th>
-                                                                <th style="width: 30%">Horário</th>
+                                                                <th style="width: 15%">ID</th>
+                                                                <th style="width: 35%">Nome Completo</th>
+                                                                <th style="width: 25%">Localização</th>
+                                                                <th style="width: 25%">Horário</th>
                                                             </tr>
                                                         </thead>
                                                         <tbody>';
                                             }
                                             $horario_checkin = date('H:i:s', strtotime($v['data_hora']));
                                             $nome_completo   = $v['nome'] . ' ' . $v['sobrenome'];
+                                            $tem_localizacao = !empty($v['latitude']) && !empty($v['longitude']);
                                         ?>
                                             <tr>
                                                 <td class="text-muted small"><?= htmlspecialchars($v['id']) ?></td>
                                                 <td class="fw-bold text-white"><?= htmlspecialchars($nome_completo) ?></td>
+                                                <td>
+                                                    <?php if ($tem_localizacao): ?>
+                                                        <a href="https://www.google.com/maps?q=<?= $v['latitude'] ?>,<?= $v['longitude'] ?>" 
+                                                           target="_blank" class="text-decoration-none" title="Abrir no Google Maps">
+                                                            <span class="badge text-bg-success">
+                                                                <i class="fa-solid fa-location-dot me-1"></i>Ver Mapa
+                                                            </span>
+                                                        </a>
+                                                    <?php else: ?>
+                                                        <span class="badge text-bg-secondary"><i class="fa-solid fa-location-crosshairs me-1"></i>Não informada</span>
+                                                    <?php endif; ?>
+                                                </td>
                                                 <td><i class="fa-regular fa-clock text-warning me-2"></i><?= htmlspecialchars($horario_checkin) ?></td>
                                             </tr>
                                         <?php endforeach;

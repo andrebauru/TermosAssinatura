@@ -6,6 +6,8 @@ CREATE TABLE IF NOT EXISTS visitantes (
     id VARCHAR(50) NOT NULL,
     nome VARCHAR(100) NOT NULL,
     sobrenome VARCHAR(100) NOT NULL,
+    latitude DECIMAL(10,8) DEFAULT NULL,
+    longitude DECIMAL(11,8) DEFAULT NULL,
     data_hora TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -27,4 +29,8 @@ ON DUPLICATE KEY UPDATE valor = VALUES(valor);
 
 INSERT INTO configuracoes (chave, valor) VALUES 
 ('gira_titulo', '')
+ON DUPLICATE KEY UPDATE valor = VALUES(valor);
+
+INSERT INTO configuracoes (chave, valor) VALUES 
+('solicitar_geolocalizacao', '0')
 ON DUPLICATE KEY UPDATE valor = VALUES(valor);

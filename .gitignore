@@ -4,6 +4,7 @@
 
 # Ignore OS files
 config.php
+update.sql
 Thumbs.db
 Desktop.ini
 .DS_Store

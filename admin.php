@@ -16,12 +16,17 @@ if (isset($_GET['action']) && $_GET['action'] === 'logout') {
 // Exportar CSV
 if (isset($_GET['action']) && $_GET['action'] === 'export_csv' && isset($_SESSION['admin_logged']) && $_SESSION['admin_logged'] === true) {
     try {
-        $where = '';
+        $conditions = [];
         $params = [];
         if (!empty($_GET['data_filtro'])) {
-            $where = "WHERE DATE(data_hora) = :data_filtro";
+            $conditions[] = "DATE(data_hora) = :data_filtro";
             $params[':data_filtro'] = $_GET['data_filtro'];
         }
+        if (!empty($_GET['busca'])) {
+            $conditions[] = "(nome LIKE :busca OR sobrenome LIKE :busca)";
+            $params[':busca'] = '%' . $_GET['busca'] . '%';
+        }
+        $where = !empty($conditions) ? 'WHERE ' . implode(' AND ', $conditions) : '';
         $stmt = $pdo->prepare("SELECT id, nome, sobrenome, latitude, longitude, data_hora FROM visitantes $where ORDER BY data_hora DESC");
         $stmt->execute($params);
         $rows = $stmt->fetchAll();
@@ -103,11 +108,14 @@ if ($is_logged && $_SERVER['REQUEST_METHOD'] === 'POST') {
                     try {
                         $stmt_prev = $pdo->query("SELECT valor FROM configuracoes WHERE chave = 'gira_imagem'");
                         $prev_img  = $stmt_prev->fetchColumn();
-                        if (!empty($prev_img) && file_exists($prev_img)) {
-                            @unlink($prev_img);
-                        }
+                        // Não apaga a imagem anterior — fica no histórico
                         $stmt = $pdo->prepare("UPDATE configuracoes SET valor = :valor WHERE chave = 'gira_imagem'");
                         $stmt->execute([':valor' => $dest_path]);
+
+                        // Salvar no histórico de giras
+                        $stmt_hist = $pdo->prepare("INSERT INTO giras (titulo, imagem_path) VALUES (:titulo, :imagem)");
+                        $stmt_hist->execute([':titulo' => $novo_titulo, ':imagem' => $dest_path]);
+
                         $success_message = 'Gira do Dia atualizada com sucesso! Título: "' . htmlspecialchars($novo_titulo) . '"';
                     } catch (PDOException $e) {
                         $error_message = 'Erro ao salvar a imagem no banco de dados: ' . $e->getMessage();
@@ -119,7 +127,13 @@ if ($is_logged && $_SERVER['REQUEST_METHOD'] === 'POST') {
                 $error_message = 'Formato inválido. Apenas imagens JPG, PNG e WEBP são aceitas.';
             }
         } elseif (empty($error_message)) {
-            // Nenhum arquivo enviado, mas título foi salvo
+            // Nenhum arquivo enviado, mas título foi salvo — salva no histórico sem imagem
+            try {
+                $stmt_hist = $pdo->prepare("INSERT INTO giras (titulo, imagem_path) VALUES (:titulo, NULL)");
+                $stmt_hist->execute([':titulo' => $novo_titulo]);
+            } catch (PDOException $e) {
+                // Ignora se tabela giras não existir ainda
+            }
             $success_message = 'Título da Gira atualizado para: "' . htmlspecialchars($novo_titulo) . '"';
         }
     }
@@ -161,10 +175,12 @@ $gira_imagem_atual  = '';
 $gira_titulo_atual  = '';
 $solicitar_geo      = false;
 $visitantes         = [];
+$historico_giras    = [];
 $total_hoje         = 0;
 $total_geral        = 0;
 $ultima_assinatura  = null;
 $data_filtro        = isset($_GET['data_filtro']) ? $_GET['data_filtro'] : '';
+$busca              = isset($_GET['busca']) ? trim($_GET['busca']) : '';
 
 if ($is_logged) {
     try {
@@ -187,16 +203,30 @@ if ($is_logged) {
         $stmt_ultima    = $pdo->query("SELECT nome, sobrenome, data_hora FROM visitantes ORDER BY data_hora DESC LIMIT 1");
         $ultima_assinatura = $stmt_ultima->fetch();
 
-        // Recupera visitantes (com filtro de data opcional)
-        $where  = '';
+        // Recupera visitantes (com filtro de data e busca por nome)
+        $conditions = [];
         $params = [];
         if (!empty($data_filtro)) {
-            $where  = "WHERE DATE(data_hora) = :data_filtro";
-            $params = [':data_filtro' => $data_filtro];
+            $conditions[] = "DATE(data_hora) = :data_filtro";
+            $params[':data_filtro'] = $data_filtro;
         }
+        if (!empty($busca)) {
+            $conditions[] = "(nome LIKE :busca OR sobrenome LIKE :busca)";
+            $params[':busca'] = '%' . $busca . '%';
+        }
+        $where = !empty($conditions) ? 'WHERE ' . implode(' AND ', $conditions) : '';
         $stmt_vis = $pdo->prepare("SELECT id, nome, sobrenome, latitude, longitude, data_hora FROM visitantes $where ORDER BY data_hora DESC");
         $stmt_vis->execute($params);
         $visitantes = $stmt_vis->fetchAll();
+
+        // Recupera histórico de giras
+        try {
+            $stmt_giras = $pdo->query("SELECT id, titulo, imagem_path, data_gira FROM giras ORDER BY data_gira DESC LIMIT 50");
+            $historico_giras = $stmt_giras->fetchAll();
+        } catch (PDOException $e) {
+            // Tabela giras pode não existir ainda — ignorar
+            $historico_giras = [];
+        }
 
     } catch (PDOException $e) {
         $error_message = 'Erro ao conectar e recuperar dados: ' . $e->getMessage();
@@ -430,29 +460,55 @@ if ($is_logged) {
 
                             <!-- ═══ ABA 2: HISTÓRICO DE ASSINATURAS ═══ -->
                             <div class="tab-pane fade" id="historico" role="tabpanel">
-                                <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-4">
+                                <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
                                     <h3 class="h5 text-warning mb-0"><i class="fa-solid fa-list me-2"></i>Visitantes Registrados</h3>
                                     <div class="d-flex gap-2 align-items-center flex-wrap">
-                                        <!-- Filtro de data -->
-                                        <form method="GET" action="admin.php" class="d-flex gap-2 align-items-center">
-                                            <input type="hidden" name="tab" value="historico">
-                                            <input type="date" name="data_filtro" value="<?= htmlspecialchars($data_filtro) ?>"
-                                                   class="form-control form-control-sm"
-                                                   style="width: 160px; font-size: 0.85rem; padding: 0.3rem 0.6rem;">
-                                            <button type="submit" class="btn btn-sm btn-outline-warning">
-                                                <i class="fa-solid fa-filter me-1"></i>Filtrar
-                                            </button>
-                                            <?php if (!empty($data_filtro)): ?>
-                                                <a href="admin.php" class="btn btn-sm btn-outline-secondary">
-                                                    <i class="fa-solid fa-xmark"></i>
-                                                </a>
-                                            <?php endif; ?>
-                                        </form>
-                                        <!-- Exportar CSV -->
-                                        <a href="admin.php?action=export_csv<?= !empty($data_filtro) ? '&data_filtro=' . urlencode($data_filtro) : '' ?>" class="btn btn-sm btn-outline-success">
-                                            <i class="fa-solid fa-file-csv me-1"></i>CSV
+                                        <!-- Exportar CSV (respeita filtros ativos) -->
+                                        <?php
+                                        $csv_params = [];
+                                        if (!empty($data_filtro)) $csv_params[] = 'data_filtro=' . urlencode($data_filtro);
+                                        if (!empty($busca)) $csv_params[] = 'busca=' . urlencode($busca);
+                                        $csv_query = !empty($csv_params) ? '&' . implode('&', $csv_params) : '';
+                                        ?>
+                                        <a href="admin.php?action=export_csv<?= $csv_query ?>" class="btn btn-sm btn-outline-success">
+                                            <i class="fa-solid fa-file-csv me-1"></i>Exportar CSV
                                         </a>
                                     </div>
+                                </div>
+
+                                <!-- Barra de Filtros: Data + Busca por nome -->
+                                <div class="p-3 mb-4 rounded" style="background: rgba(0,0,0,0.3); border: 1px solid rgba(212,175,55,0.15);">
+                                    <form method="GET" action="admin.php" class="row g-2 align-items-end">
+                                        <input type="hidden" name="tab" value="historico">
+                                        <!-- Busca por nome -->
+                                        <div class="col-md-5">
+                                            <label class="form-label small text-muted mb-1">
+                                                <i class="fa-solid fa-magnifying-glass me-1"></i>Buscar por nome
+                                            </label>
+                                            <input type="text" name="busca" value="<?= htmlspecialchars($busca) ?>"
+                                                   class="form-control form-control-sm"
+                                                   placeholder="Digite o nome ou sobrenome...">
+                                        </div>
+                                        <!-- Filtro de data -->
+                                        <div class="col-md-3">
+                                            <label class="form-label small text-muted mb-1">
+                                                <i class="fa-regular fa-calendar me-1"></i>Data
+                                            </label>
+                                            <input type="date" name="data_filtro" value="<?= htmlspecialchars($data_filtro) ?>"
+                                                   class="form-control form-control-sm">
+                                        </div>
+                                        <!-- Botões -->
+                                        <div class="col-md-4 d-flex gap-2">
+                                            <button type="submit" class="btn btn-sm btn-outline-warning flex-grow-1">
+                                                <i class="fa-solid fa-filter me-1"></i>Filtrar
+                                            </button>
+                                            <?php if (!empty($data_filtro) || !empty($busca)): ?>
+                                                <a href="admin.php?tab=historico" class="btn btn-sm btn-outline-secondary">
+                                                    <i class="fa-solid fa-xmark me-1"></i>Limpar
+                                                </a>
+                                            <?php endif; ?>
+                                        </div>
+                                    </form>
                                 </div>
 
                                 <?php if (empty($visitantes)): ?>
@@ -515,6 +571,7 @@ if ($is_logged) {
                                     <p class="text-muted small text-end mt-1">
                                         <?= count($visitantes) ?> registro(s) encontrado(s)
                                         <?= !empty($data_filtro) ? 'em ' . date('d/m/Y', strtotime($data_filtro)) : '' ?>
+                                        <?= !empty($busca) ? ' para "' . htmlspecialchars($busca) . '"' : '' ?>
                                     </p>
                                 <?php endif; ?>
                             </div>
@@ -587,6 +644,58 @@ if ($is_logged) {
                                         </div>
                                     </div>
                                 </div>
+
+                                <!-- Histórico de Giras Realizadas -->
+                                <hr class="border-secondary my-4">
+                                <h4 class="h6 mb-3 text-warning"><i class="fa-solid fa-clock-rotate-left me-2"></i>Histórico de Giras</h4>
+
+                                <?php if (empty($historico_giras)): ?>
+                                    <div class="text-center py-4 text-muted">
+                                        <i class="fa-solid fa-fire-flame-curved d-block fs-1 mb-2 opacity-50"></i>
+                                        Nenhuma gira registrada no histórico.
+                                    </div>
+                                <?php else: ?>
+                                    <div class="table-responsive" style="max-height: 40vh; overflow-y: auto;">
+                                        <table class="table table-dark table-striped table-hover align-middle mb-0">
+                                            <thead>
+                                                <tr>
+                                                    <th style="width: 8%">#</th>
+                                                    <th style="width: 37%">Título</th>
+                                                    <th style="width: 25%">Imagem</th>
+                                                    <th style="width: 30%">Data</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                <?php foreach ($historico_giras as $g): ?>
+                                                <tr>
+                                                    <td class="text-muted"><?= $g['id'] ?></td>
+                                                    <td class="fw-bold text-white">
+                                                        <i class="fa-solid fa-fire text-warning me-1"></i>
+                                                        <?= !empty($g['titulo']) ? htmlspecialchars($g['titulo']) : '<span class="text-muted fst-italic">Sem título</span>' ?>
+                                                    </td>
+                                                    <td>
+                                                        <?php if (!empty($g['imagem_path'])): ?>
+                                                            <?php if (file_exists($g['imagem_path'])): ?>
+                                                                <img src="<?= htmlspecialchars($g['imagem_path']) ?>" alt="Gira" 
+                                                                     style="height: 40px; width: 60px; object-fit: cover; border-radius: 4px; border: 1px solid rgba(212,175,55,0.3);">
+                                                            <?php else: ?>
+                                                                <span class="badge text-bg-secondary"><i class="fa-solid fa-image-slash me-1"></i>Removida</span>
+                                                            <?php endif; ?>
+                                                        <?php else: ?>
+                                                            <span class="badge text-bg-secondary"><i class="fa-solid fa-minus me-1"></i>Sem imagem</span>
+                                                        <?php endif; ?>
+                                                    </td>
+                                                    <td>
+                                                        <i class="fa-regular fa-calendar text-warning me-1"></i>
+                                                        <?= date('d/m/Y \à\s H:i', strtotime($g['data_gira'])) ?>
+                                                    </td>
+                                                </tr>
+                                                <?php endforeach; ?>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                    <p class="text-muted small text-end mt-1"><?= count($historico_giras) ?> gira(s) no histórico</p>
+                                <?php endif; ?>
                             </div>
 
                             <!-- ═══ ABA 4: EDITAR TERMOS (WYSIWYG) ═══ -->

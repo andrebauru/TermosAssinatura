@@ -18,6 +18,14 @@ CREATE TABLE IF NOT EXISTS configuracoes (
     PRIMARY KEY (chave)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+CREATE TABLE IF NOT EXISTS giras (
+    id INT AUTO_INCREMENT NOT NULL,
+    titulo VARCHAR(255) NOT NULL DEFAULT '',
+    imagem_path VARCHAR(500) DEFAULT NULL,
+    data_gira TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 -- Inserir valores padrão
 INSERT INTO configuracoes (chave, valor) VALUES 
 ('termo_texto', '<p class="text-warning fw-bold mb-3">Para garantir um ambiente seguro e harmonioso, ao confirmar abaixo, você concorda que:</p>\r\n\r\n<ol class="ps-3 text-light">\r\n    <li class="mb-3">\r\n        <strong class="text-warning">Atendimento Espiritual não é Medicina/Advocacia:</strong> \r\n        Nessas orientações e rituais não substituem tratamentos médicos, psicológicos ou aconselhamento legal.\r\n    </li>\r\n    <li class="mb-3">\r\n        <strong class="text-warning">Responsabilidade por Menores:</strong> \r\n        O terreiro não possui cuidadores ou monitores. Se você trouxe crianças ou bebês, a segurança, controle e saúde deles no ambiente (que contém fumaça de charuto e som alto) são de sua total e absoluta responsabilidade.\r\n    </li>\r\n    <li class="mb-3">\r\n        <strong class="text-warning">Pertences e Veículos:</strong> \r\n        Seus objetos pessoais, veículos no estacionamento e situação legal civil são de sua responsabilidade. Não revistamos bolsas, logo, você responde legalmente por qualquer item que portar.\r\n    </li>\r\n    <li class="mb-3">\r\n        <strong class="text-warning">Postura e Respeito:</strong> \r\n        Exigimos silêncio na área externa. É proibido qualquer tipo de discurso de ódio, discussão política ou proselitismo religioso no local.\r\n    </li>\r\n    <li class="mb-0">\r\n        <strong class="text-warning">Privacidade (Sem Fotos/Vídeos):</strong> \r\n        É estritamente proibido fotografar, filmar, gravar áudio ou fazer postagens em redes sociais sem autorização prévia da Direção.\r\n    </li>\r\n</ol>')

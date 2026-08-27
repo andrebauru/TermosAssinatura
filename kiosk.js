@@ -1,13 +1,13 @@
 /**
- * kiosk.js – Módulo de modo quiosque para o Templo TUDO TEKEM
+ * kiosk.js – Módulo de modo quiosque avançado para o Templo TUDO TEKEM
  *
  * Funcionalidades:
- *  - Registra o Service Worker (PWA)
- *  - Mostra banner de instalação PWA
- *  - Mantém fullscreen em TODAS as páginas (intercepta saídas)
- *  - Bloqueia teclas de fuga (Escape, F11, Alt+F4, etc.)
- *  - Ativa Wake Lock para manter a tela acesa e em foco
- *  - Impede abertura de menu de contexto
+ *  - Registra o Service Worker (PWA) e gerencia banner de instalação
+ *  - Fullscreen persistente: bloqueia saída acidental e só permite sair via botão Sair com senha
+ *  - Oculta barras de navegação do sistema e área de notificações (navigationUI: 'hide')
+ *  - Bloqueia gestos de notificações nas bordas e atalhos de teclado (Keyboard Lock API)
+ *  - Wake Lock API para impedir que a tela apague ou bloqueie
+ *  - Bloqueia menu de contexto e ações de fuga
  */
 
 (function () {
@@ -15,33 +15,42 @@
 
   /* ─── 1. Service Worker / PWA ─── */
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('/sw.js').catch(() => {});
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('sw.js').catch(() => {});
+    });
   }
 
-  /* ─── 2. Banner de instalação (A2HS) ─── */
+  /* ─── 2. Banner de instalação PWA (A2HS) ─── */
   let _deferredPrompt = null;
+
+  // Detecta se já está rodando como app instalado (standalone ou fullscreen)
+  const isStandalone = window.matchMedia('(display-mode: standalone)').matches ||
+                       window.matchMedia('(display-mode: fullscreen)').matches ||
+                       window.navigator.standalone === true;
 
   window.addEventListener('beforeinstallprompt', (e) => {
     e.preventDefault();
     _deferredPrompt = e;
 
-    // Cria o banner se ainda não existir
-    if (!document.getElementById('pwa-install-banner')) {
+    if (!isStandalone && !document.getElementById('pwa-install-banner')) {
       const banner = document.createElement('div');
       banner.id = 'pwa-install-banner';
       banner.innerHTML = `
         <div style="
           position: fixed; bottom: 0; left: 0; right: 0; z-index: 99999;
-          background: rgba(15,5,5,0.97); border-top: 1px solid rgba(212,175,55,0.5);
+          background: rgba(15,5,5,0.98); border-top: 1px solid rgba(212,175,55,0.5);
           display: flex; align-items: center; justify-content: space-between;
           padding: 0.75rem 1.25rem; gap: 1rem; font-family: 'Outfit', sans-serif;
-          backdrop-filter: blur(8px); box-shadow: 0 -4px 20px rgba(140,20,20,0.4);
+          backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+          box-shadow: 0 -4px 25px rgba(140,20,20,0.6);
         ">
           <div style="display:flex;align-items:center;gap:0.75rem;">
-            <img src="/Files/Logo TT TEKEM.png" style="width:40px;height:40px;object-fit:contain;border-radius:8px;" onerror="this.style.display='none'">
+            <div style="width:38px;height:38px;border-radius:8px;background:rgba(212,175,55,0.15);border:1px solid #d4af37;display:flex;align-items:center;justify-content:center;color:#d4af37;font-size:1.2rem;">
+              📲
+            </div>
             <div>
-              <div style="color:#d4af37;font-weight:700;font-size:0.9rem;">Instalar app no tablet</div>
-              <div style="color:#c8c8c8;font-size:0.78rem;">Adicione à tela inicial para modo quiosque completo</div>
+              <div style="color:#d4af37;font-weight:700;font-size:0.9rem;">Instalar Aplicativo</div>
+              <div style="color:#c8c8c8;font-size:0.78rem;">Instale para modo quiosque em tela cheia sem barras</div>
             </div>
           </div>
           <div style="display:flex;gap:0.5rem;flex-shrink:0;">
@@ -54,7 +63,7 @@
               background:linear-gradient(135deg,#8c1414,#540505);
               border:1px solid #d4af37;color:#fff;border-radius:6px;
               padding:0.4rem 1rem;font-size:0.85rem;font-weight:700;cursor:pointer;
-            ">📲 Instalar</button>
+            ">Instalar</button>
           </div>
         </div>
       `;
@@ -67,7 +76,6 @@
           _deferredPrompt = null;
           if (outcome === 'accepted') {
             banner.remove();
-            // Após instalar, pede fullscreen imediatamente
             requestKioskFullscreen();
           }
         }
@@ -79,30 +87,69 @@
     }
   });
 
-  /* ─── 3. Fullscreen persistente ─── */
-  let _kioskEnabled = false;   // ativado na primeira vez que o usuário entra em FS
-  let _allowExit    = false;   // permitido apenas após senha correta
+  window.addEventListener('appinstalled', () => {
+    _deferredPrompt = null;
+    const banner = document.getElementById('pwa-install-banner');
+    if (banner) banner.remove();
+  });
+
+  /* ─── 3. Fullscreen persistente e bloqueio de barras/notificações ─── */
+  let _kioskEnabled = false;
+  let _allowExit    = false;
 
   function requestKioskFullscreen() {
     if (document.fullscreenElement) return;
-    document.documentElement.requestFullscreen({ navigationUI: 'hide' }).catch(() => {});
+
+    const el = document.documentElement;
+    const requestMethod = el.requestFullscreen ||
+                          el.webkitRequestFullscreen ||
+                          el.mozRequestFullScreen ||
+                          el.msRequestFullscreen;
+
+    if (requestMethod) {
+      // navigationUI: 'hide' instrui o SO a ocultar a barra de navegação inferior e área de status/notificações
+      const promise = requestMethod.call(el, { navigationUI: 'hide' });
+      if (promise && promise.catch) {
+        promise.catch(() => {});
+      }
+    }
+
+    // Tenta travar orientação em retrato (portrait)
+    if (screen.orientation && screen.orientation.lock) {
+      screen.orientation.lock('portrait').catch(() => {});
+    }
+
+    // Tenta travar atalhos de teclado (Keyboard Lock API no Chrome/Edge)
+    if (navigator.keyboard && navigator.keyboard.lock) {
+      navigator.keyboard.lock(['Escape', 'F11', 'AltLeft', 'AltRight', 'Tab']).catch(() => {});
+    }
   }
 
-  // Quando sai do fullscreen, verifica se é permitido
-  document.addEventListener('fullscreenchange', () => {
-    if (!document.fullscreenElement && _kioskEnabled && !_allowExit) {
-      // Voltou a fullscreen automaticamente após um breve delay
-      // (delay necessário para iOS/Android processar a mudança)
-      setTimeout(requestKioskFullscreen, 150);
+  // Intercepta qualquer tentativa do sistema de sair da tela cheia
+  function handleFullscreenChange() {
+    const isFS = !!(document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement);
+    
+    if (!isFS && _kioskEnabled && !_allowExit) {
+      // Re-entra em tela cheia imediatamente se a saída não foi autorizada
+      setTimeout(requestKioskFullscreen, 100);
     }
-    if (document.fullscreenElement) {
+    
+    if (isFS) {
       _kioskEnabled = true;
-      _allowExit = false; // reseta após re-entrar
-      updateFullscreenIcons();
+      _allowExit = false;
+      document.body.classList.add('in-kiosk-fullscreen');
+    } else {
+      document.body.classList.remove('in-kiosk-fullscreen');
     }
-  });
 
-  // Bloqueio de teclas de fuga
+    updateFullscreenButton();
+  }
+
+  document.addEventListener('fullscreenchange', handleFullscreenChange);
+  document.addEventListener('webkitfullscreenchange', handleFullscreenChange);
+  document.addEventListener('mozfullscreenchange', handleFullscreenChange);
+
+  // Bloqueio de atalhos de teclado
   document.addEventListener('keydown', (e) => {
     if (!_kioskEnabled) return;
 
@@ -122,12 +169,23 @@
     }
   }, true);
 
-  // Bloqueia menu de contexto (clique direito, toque longo)
+  // Bloqueia clique com botão direito e toque longo de menu
   document.addEventListener('contextmenu', (e) => {
     if (_kioskEnabled) e.preventDefault();
   });
 
-  /* ─── 4. Wake Lock (mantém tela acesa) ─── */
+  // Previne arraste acidental na borda superior (para evitar puxar painel de notificações)
+  document.addEventListener('touchstart', (e) => {
+    if (_kioskEnabled && e.touches && e.touches[0]) {
+      const y = e.touches[0].clientY;
+      // Bloqueia toque no topo extremo (onde puxa barra de notificação)
+      if (y < 15) {
+        e.preventDefault();
+      }
+    }
+  }, { passive: false });
+
+  /* ─── 4. Screen Wake Lock (mantém tela sempre acesa e focada) ─── */
   let _wakeLock = null;
 
   async function acquireWakeLock() {
@@ -138,36 +196,41 @@
     } catch (_) {}
   }
 
-  // Re-adquire o wake lock quando a página volta ao foco
   document.addEventListener('visibilitychange', async () => {
     if (document.visibilityState === 'visible') {
       await acquireWakeLock();
       if (_kioskEnabled && !_allowExit) {
-        setTimeout(requestKioskFullscreen, 200);
+        setTimeout(requestKioskFullscreen, 150);
       }
     }
   });
 
-  // Inicia wake lock quando a página carrega
   acquireWakeLock();
 
   /* ─── 5. API pública para as páginas ─── */
   window.KioskMode = {
-    /** Chame para ativar o fullscreen e o modo quiosque */
     enter() {
-      requestKioskFullscreen();
+      _allowExit = false;
       _kioskEnabled = true;
+      requestKioskFullscreen();
     },
-    /** Chame ANTES de sair (após senha correta) */
     allowExit() {
       _allowExit = true;
     },
-    /** Sai do fullscreen com permissão */
     exit() {
       _allowExit = true;
       _kioskEnabled = false;
-      if (document.fullscreenElement) {
-        document.exitFullscreen().catch(() => {});
+      
+      if (navigator.keyboard && navigator.keyboard.unlock) {
+        navigator.keyboard.unlock();
+      }
+      
+      if (document.fullscreenElement || document.webkitFullscreenElement) {
+        const exitMethod = document.exitFullscreen ||
+                             document.webkitExitFullscreen ||
+                             document.mozCancelFullScreen ||
+                             document.msExitFullscreen;
+        if (exitMethod) exitMethod.call(document).catch(() => {});
       }
     },
     isActive() {
@@ -175,15 +238,27 @@
     }
   };
 
-  /* ─── 6. Ícones de fullscreen (compatibilidade com index.php) ─── */
-  function updateFullscreenIcons() {
-    const icon = document.getElementById('fullscreenIcon');
-    if (!icon) return;
-    if (document.fullscreenElement) {
-      icon.classList.replace('fa-expand', 'fa-compress');
-    } else {
-      icon.classList.replace('fa-compress', 'fa-expand');
+  /* ─── 6. Atualização visual do botão de fullscreen ─── */
+  function updateFullscreenButton() {
+    const btn = document.getElementById('fullscreenToggle');
+    const isFS = !!(document.fullscreenElement || document.webkitFullscreenElement);
+    if (btn) {
+      if (isFS) {
+        // Em tela cheia, o botão de tela cheia fica oculto ou desativado porque a saída só é permitida pelo botão Sair
+        btn.style.display = 'none';
+      } else {
+        btn.style.display = 'flex';
+      }
     }
+  }
+
+  // Se já abrir como app ou já em tela cheia, inicia o quiosque automaticamente
+  if (isStandalone) {
+    window.addEventListener('load', () => {
+      setTimeout(() => {
+        window.KioskMode.enter();
+      }, 500);
+    });
   }
 
 })();

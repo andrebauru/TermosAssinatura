@@ -21,7 +21,7 @@
     --font-body: 'Outfit', 'Inter', sans-serif;
 }
 
-body {
+html, body {
     background: radial-gradient(circle at center, #220808 0%, var(--bg-dark) 100%) no-repeat fixed;
     color: var(--text-light);
     font-family: var(--font-body);
@@ -31,6 +31,12 @@ body {
     overflow-x: hidden;
     user-select: none;
     -webkit-user-select: none;
+    overscroll-behavior: none;
+    touch-action: manipulation;
+}
+
+body.in-kiosk-fullscreen {
+    overflow: hidden;
 }
 
 /* Kiosk Layout for Tablet */

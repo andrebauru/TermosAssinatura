@@ -1,6 +1,6 @@
 # Ignore uploaded images but keep the folder structure
 /uploads/*
-!/uploads/.gitkeep
+/Files/*
 
 # Ignore OS files
 config.php
